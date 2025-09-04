@@ -10,7 +10,7 @@ This tool helps Trezor users extract the correct private keys needed to claim Mi
 - **NEVER use this on your primary wallet with funds**
 - **RECOMMENDED: Create a NEW Trezor wallet, transfer funds there first**
 - **Use your OLD eligible address in this script for claiming**
-- **Only use on a secure, offline computer**
+- **Only use on a secure, isolated computer with synced Cardano node**
 - **Delete all generated files immediately after claiming**
 - **Never share your seed phrase or private keys**
 
