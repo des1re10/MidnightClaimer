@@ -287,6 +287,29 @@ Install via:
 - **Cardano CLI** (standalone)
 - **Docker** (cardano-node image)
 
+## ✅ Tested Configuration
+
+This tool has been successfully tested with the following setup:
+
+### Hardware & Wallet:
+- **OS**: Windows 11
+- **Hardware Wallet**: Trezor Model T with passphrase protection
+- **Cardano Node**: Fully synced mainnet node
+
+### Software Environment:
+- **Browser**: Brave Browser
+- **Wallet Extension**: Eternl Wallet
+- **Python**: 3.8+
+
+### Test Results:
+- ✅ **Seed phrase derivation**: Working correctly
+- ✅ **Passphrase handling**: All scenarios tested successfully  
+- ✅ **Key extraction**: Generated valid .skey files
+- ✅ **Eternl import**: Keys imported without issues
+- ✅ **Token claiming**: Successful Midnight token claim completed
+
+*Your mileage may vary with different configurations, but this represents a confirmed working setup.*
+
 ## 💝 Support This Project
 
 If this tool helped you successfully claim your Midnight tokens, consider sending a small tip to support development and maintenance:
