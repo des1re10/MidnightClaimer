@@ -291,7 +291,38 @@ Install via:
 
 If this tool helped you successfully claim your Midnight tokens, consider sending a small tip to support development and maintenance:
 
-**ADA Address:** `[Your ADA address will go here]`
+**ADA Address:** `addr1qxk3cq8emwuusdlas04yn0qf3xndd6ts6ta7l3kh4vphuhss0y3k3y7r4ztz6xy0xjysj4j9ksysnlhnp0stqdwwyusq9g5th3`
+
+### QR Code for Easy Donations:
+
+![Donation QR Code](donation_qr.png)
+
+<details>
+<summary>ASCII QR Code (click to expand)</summary>
+
+```
+ ▄▄▄▄▄▄▄  ▄    ▄    ▄   ▄    ▄ ▄▄▄▄▄▄▄ 
+ █ ▄▄▄ █ ▀█▄█▀  █  █ ▀█    ▀▀▄ █ ▄▄▄ █ 
+ █ ███ █ ▀▀▄▀█▀█▀██ ██▄█▄ ▀▀ ▄ █ ███ █ 
+ █▄▄▄▄▄█ █ █ ▄▀▄▀▄ █ ▄ ▄ █ █▀▄ █▄▄▄▄▄█ 
+ ▄▄▄▄▄ ▄▄▄▄▄▀▀▄█ ▀▄▀▄▄▀█▄█▄ ▀▄▄ ▄ ▄ ▄  
+ ██▄▄▄▀▄▄ █▄▀█ █▄▀██▀▀▀▀▀▄▄█▄█▄▄█▄▀ █▄ 
+  ▄ ▀ █▄▀▄█▀▄█▄▄▀ ▄▀▀█▀▀ ▀▄▄▄▄▄█▄▄ ▄▀█ 
+  ▀▄▀▀▀▄▄▄  ▀▄ ▀▄▀▀▄▀ █▀▀▄ █▄ ▄ █ █▀▀▄ 
+ ▀▄ ▀ ▀▄▀▄█▀  ▄█▀▀▄ █▄▀▄▀ ▄▄▄▀▄██▄▄▄ ▄ 
+ █▄▀▄ ▀▄ █▄ ▀  ▄▄▀▄▄▀▀▄▀▀▄▄▀▄█ ▄█ ▀██▄ 
+  █▄▄▄▄▄▀  ▀  ▄▄ ▀▄  █▀▀  ▄▀█▄███▄▀▄▄█ 
+ ▄▀ ▀▄ ▄▀  ▀▀▀▄█▄███▀▀▀▀▀█▄█▄▀▀▄█▄▀▄▄▄ 
+  ▀  █▄▄  ▀█▀▄▄█▄▄▄██▄▀█▄█▄▄█▄▀▄█▄▄▄▄█ 
+ █ ▄▄ ▀▄ █ █▀ ▄█▄█  ▀▀  ▀  █▄ ▀▄█ ▀▄▄▄ 
+ █ █▄ █▄▄▄█ ▄▀▄█▀▄▄▀ █▀▀██▄▄ █▄███ ▄▀█ 
+ ▄▄▄▄▄▄▄ ███▀▀▀▀▄███▀ ▀▀▀   ▀█ ▄ █▀ ▄▄ 
+ █ ▄▄▄ █ ▄█▄ ▀▄█▄▄▄█▀▄▀█▀▀▄▀▄█▄▄▄█▀▄█▄ 
+ █ ███ █ ██▀▀  █▄█▀▄▀█▄▀▀█▄█▄▄▄▀▄▀█▀▄▄ 
+ █▄▄▄▄▄█ ██▄▀▀▄█  ▄ ▀█▀▀▄▄▄█ ▀▀██ ▄▄▄█
+```
+
+</details>
 
 *Tips help maintain this project and keep it updated for the community!*
 
