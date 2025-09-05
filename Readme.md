@@ -121,24 +121,70 @@ python cli_convert.py
 
 This creates the final `.skey` files that Eternl can import.
 
-## 🔍 How to Get Required Information
+## 📝 How to Get Required Information
 
 ### Getting Your Claim Address
 1. Visit [Midnight Portal](https://midnight.network)
-2. Connect your Trezor wallet
+2. Connect your Trezor wallet  
 3. Navigate to token claim section
 4. Copy the displayed claim address (starts with `addr1q`)
 
-### Getting Your Stake Checksum
-1. Open your Cardano wallet (Yoroi, Adalite, etc.)
-2. Go to wallet settings or advanced view
-3. Find "Stake Key" or "Reward Address"
-4. Copy the stake key hash/checksum (64-character hex string)
+### Getting Your Stake Checksum (Most Important!)
+The stake checksum is a 64-character hex string that identifies your staking key. Here's where to find it:
+
+#### Option 1: From Yoroi Wallet
+1. Open Yoroi wallet with your Trezor
+2. Go to **"Wallet" → "Receive"**
+3. Click **"Show advanced options"** or **"Stake Key"**
+4. Copy the **"Stake Key Hash"** (64 hex characters)
+
+#### Option 2: From AdaLite
+1. Go to [adalite.io](https://adalite.io) and connect your Trezor
+2. Navigate to **"Staking"** section
+3. Look for **"Stake Key Hash"** or **"Reward Address"**
+4. Copy the 64-character hex string
+
+#### Option 3: From Cardano Explorer
+1. Go to [cardanoscan.io](https://cardanoscan.io) or [poolpm.cardano.org](https://poolpm.cardano.org)
+2. Enter your claim address (the addr1q... from Midnight Portal)
+3. Look for **"Stake Address"** or **"Stake Key Hash"**
+4. Copy the 64-character hex value
+
+#### Option 4: From Trezor Suite (if available)
+1. Open Trezor Suite
+2. Go to your Cardano account
+3. Navigate to **"Staking"** or **"Advanced"** section
+4. Find **"Stake Key"** information
+
+**Example of what you're looking for:**
+```
+STAKE_CHECKSUM=a1b2c3d4e5f6789a1b2c3d4e5f6789a1b2c3d4e5f6789a1b2c3d4e5f6789ab
+```
 
 ### Getting Payment Path
-- **Standard Trezor**: `m/1852'/1815'/0'/0/0`
-- **Multi-account**: `m/1852'/1815'/1'/0/0` (account 1)
-- **Custom**: Check your wallet's derivation settings
+The payment derivation path depends on which account your eligible address is in:
+
+#### Standard Trezor Setup
+- **Account 0 (most common)**: `m/1852'/1815'/0'/0/0`
+- **Account 1**: `m/1852'/1815'/1'/0/0`  
+- **Account 2**: `m/1852'/1815'/2'/0/0`
+
+#### How to Determine Your Account
+1. Check your wallet - most users use Account 0
+2. If you created multiple accounts in Yoroi/AdaLite, check which account contains your eligible address
+3. The script will test multiple accounts automatically if the first doesn't work
+
+**Example of what you're setting:**
+```
+PAYMENT_PATH=m/1852'/1815'/0'/0/0
+```
+
+### Double-Check Your Information
+Before running the script, verify:
+- ✅ Claim address matches exactly what Midnight Portal shows
+- ✅ Stake checksum is exactly 64 hex characters (no spaces, no prefixes)
+- ✅ Payment path matches your account number
+- ✅ Seed phrase is exactly as written on your recovery sheet
 
 ## 📊 Example Successful Output
 
@@ -404,7 +450,7 @@ This tool has been successfully tested with the following setup:
 
 *Your mileage may vary with different configurations, but this represents a confirmed working setup.*
 
-## 💝 Support This Project
+## 👍 Support This Project
 
 If this tool helped you successfully claim your Midnight tokens, consider sending a small tip to support development and maintenance:
 
