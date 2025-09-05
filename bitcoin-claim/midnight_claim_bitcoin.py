@@ -11,11 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import logging
 from mnemonic import Mnemonic
-from bitcoinlib.wallets import HDWallet as BitcoinHDWallet
 from bitcoinlib.keys import HDKey
-from bitcoinlib.encoding import addr_base58_to_hash160, addr_bech32_to_hash160
-import hashlib
-import base58
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

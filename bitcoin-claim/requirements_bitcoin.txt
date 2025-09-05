@@ -1,21 +1,17 @@
-# Bitcoin Midnight Claim Dependencies
+# Bitcoin Midnight Claim - Python Dependencies
 # Install with: pip install -r requirements_bitcoin.txt
 
-# Core Bitcoin libraries
+# Core cryptographic libraries
 bitcoinlib>=0.12.0
 mnemonic>=0.20
 
-# Environment and utilities
+# Environment and utility libraries
 python-dotenv>=1.0.0
-pathlib2>=2.3.7
 
-# Cryptography
-cryptography>=41.0.0
-ecdsa>=0.18.0
+# Note: Standard library modules used (no installation needed):
+# - os, unicodedata, pathlib, logging
 
-# Encoding and utilities
-base58>=2.1.1
-bech32>=1.2.0
-
-# Logging and debugging
-colorlog>=6.7.0
+# Optional: If you encounter any issues, try these specific versions:
+# bitcoinlib==0.12.0
+# mnemonic==0.20
+# python-dotenv==1.0.0
