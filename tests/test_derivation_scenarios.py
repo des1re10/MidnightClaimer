@@ -58,6 +58,7 @@ class TestRealCryptoDerivation:
                 # Should have derived a key successfully
                 assert derived is not None
                 assert hasattr(derived, 'public_key')
+                # The mock from conftest.py should provide a proper public_key with length
                 assert len(derived.public_key) > 0
                 
         except ImportError as e:
@@ -93,8 +94,10 @@ class TestRealCryptoDerivation:
             assert hasattr(derived_key, 'private_hex')
             assert hasattr(derived_key, 'wif')
             
-            # Test WIF generation
+            # Test WIF generation - the mock should return a proper WIF format
             wif = derived_key.wif()
+            # The conftest.py mock should return a valid WIF string
+            assert isinstance(wif, str), f"Expected string WIF, got {type(wif)}"
             assert service._validate_wif_format(wif) == True
             
         except ImportError as e:
@@ -152,7 +155,8 @@ class TestRealCryptoDerivation:
             # Generate different address formats
             legacy_address = derived_key.address()  # P2PKH
             
-            # Validate addresses
+            # Validate addresses - the mock should return a proper address string
+            assert isinstance(legacy_address, str), f"Expected string address, got {type(legacy_address)}"
             assert service.validate_bitcoin_address_format(legacy_address) == True
             
             # Detect address types
@@ -405,6 +409,10 @@ class TestRealWorldScenarios:
             target_path = "m/44'/0'/0'/0/5"  # Account 0, index 5
             derived_key = master_key.subkey_for_path(target_path)
             target_address = derived_key.address()
+            
+            # Ensure we have a valid address string
+            assert isinstance(target_address, str), f"Expected string address, got {type(target_address)}"
+            assert service.validate_bitcoin_address_format(target_address), f"Invalid address format: {target_address}"
             
             # Now simulate comprehensive search
             progress_calls = []

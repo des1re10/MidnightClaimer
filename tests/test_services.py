@@ -104,16 +104,23 @@ class TestCardanoService(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
             
+            # Create proper mocks that return JSON strings like the conftest.py mocks
+            mock_payment_wallet = Mock()
+            mock_payment_wallet.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
+            
+            mock_stake_wallet = Mock()
+            mock_stake_wallet.to_json.return_value = '{"type": "StakeExtendedSigningKeyShelley_ed25519", "description": "Stake Signing Key", "cborHex": "5880123456"}'
+            
             # Mock derivation info
             valid_address = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
             derivation_info = {
                 'address': valid_address,
-                'derived_payment_wallet': Mock(),
-                'derived_stake_wallet': Mock(),
+                'derived_payment_wallet': mock_payment_wallet,
+                'derived_stake_wallet': mock_stake_wallet,
                 'address_type': 'payment_stake'
             }
             
-            # The global mock from conftest.py should handle this automatically
+            # Extract keys with proper mocks that return JSON strings
             result = self.service.extract_keys(derivation_info, output_dir)
             
             self.assertIn('payment_key_file', result)
