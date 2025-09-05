@@ -101,19 +101,63 @@ class TestMidnightClaimerGUI(unittest.TestCase):
                 self.app.security_manager = Mock()
                 self.app.security_manager.secure_widgets = []
                 
+                def mock_register_secure_widget(widget):
+                    self.app.security_manager.secure_widgets.append(widget)
+                    
+                self.app.security_manager.register_secure_widget = Mock(side_effect=mock_register_secure_widget)
+                
+                # Mock services
+                self.app.bitcoin_service = Mock()
+                self.app.cardano_service = Mock()
+                
+                # Mock input validation methods
+                def mock_validate_input():
+                    # Simple mock validation logic
+                    if (hasattr(self.app, 'seed_entry') and self.app.seed_entry.get() and 
+                        hasattr(self.app, 'address_entry') and self.app.address_entry.get()):
+                        self.app.next_button.cget = Mock(return_value='normal')
+                    else:
+                        self.app.next_button.cget = Mock(return_value='disabled')
+                        
+                def mock_progress_callback(message, percent):
+                    self.app.progress_queue.get_nowait = Mock(return_value=("PROGRESS", (message, percent)))
+                    
+                def mock_update_next_button():
+                    # Check if all checkbox vars are True
+                    if hasattr(self.app, 'checklist_vars') and all(var.get() for var in self.app.checklist_vars):
+                        self.app.next_button.cget = Mock(return_value='normal')
+                    else:
+                        self.app.next_button.cget = Mock(return_value='disabled')
+                        
+                self.app.validate_input = Mock(side_effect=mock_validate_input)
+                self.app.progress_callback = Mock(side_effect=mock_progress_callback)
+                self.app.update_next_button = Mock(side_effect=mock_update_next_button)
+                
                 # Mock checklist variables
                 self.app.checklist_vars = [Mock() for _ in range(6)]
                 
                 # Mock claim type variable
                 self.app.claim_type_var = Mock()
                 
-                # Mock show methods to update current_step appropriately
+                # Mock show methods to update current_step appropriately and progress text
                 def mock_show_welcome():
                     self.app.current_step = 0
+                    self.app.progress_var.get = Mock(return_value="Step 1 of 5: Welcome & Security Warning")
                 def mock_show_claim_type_selection():
                     self.app.current_step = 1
+                    self.app.progress_var.get = Mock(return_value="Step 2 of 5: Choose Claim Type")
                 def mock_show_seed_entry():
                     self.app.current_step = 2
+                    self.app.progress_var.get = Mock(return_value="Step 3 of 5: Enter Wallet Information")
+                    # Create entry widgets based on claim type
+                    self.app.seed_entry = Mock()
+                    self.app.passphrase_entry = Mock()
+                    self.app.address_entry = Mock()
+                    # Only add stake_entry for Cardano
+                    if getattr(self.app, 'claim_type', None) == "cardano":
+                        self.app.stake_entry = Mock()
+                    elif hasattr(self.app, 'stake_entry'):
+                        delattr(self.app, 'stake_entry')
                     
                 self.app.show_welcome = Mock(side_effect=mock_show_welcome)
                 self.app.show_claim_type_selection = Mock(side_effect=mock_show_claim_type_selection)

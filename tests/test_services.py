@@ -11,17 +11,32 @@ import tempfile
 import os
 
 # Mock the dependencies that might not be available in test environment
+# Use the mocks from conftest.py if they exist, otherwise create simple ones
+import sys
+_conftest_mocks = {}
+if 'pycardano' in sys.modules:
+    _conftest_mocks['pycardano'] = sys.modules['pycardano']
+if 'pycardano.key' in sys.modules:
+    _conftest_mocks['pycardano.key'] = sys.modules['pycardano.key']
+if 'bitcoinlib' in sys.modules:
+    _conftest_mocks['bitcoinlib'] = sys.modules['bitcoinlib']
+if 'bitcoinlib.keys' in sys.modules:
+    _conftest_mocks['bitcoinlib.keys'] = sys.modules['bitcoinlib.keys']
+if 'mnemonic' in sys.modules:
+    _conftest_mocks['mnemonic'] = sys.modules['mnemonic']
+
+# Fill in any missing mocks with simple MagicMocks
 with patch.dict('sys.modules', {
-    'pycardano': MagicMock(),
+    'pycardano': _conftest_mocks.get('pycardano', MagicMock()),
     'pycardano.HDWallet': MagicMock(),
     'pycardano.PaymentVerificationKey': MagicMock(),
     'pycardano.Address': MagicMock(),
     'pycardano.Network': MagicMock(),
-    'pycardano.key': MagicMock(),
-    'bitcoinlib': MagicMock(),
-    'bitcoinlib.keys': MagicMock(),
+    'pycardano.key': _conftest_mocks.get('pycardano.key', MagicMock()),
+    'bitcoinlib': _conftest_mocks.get('bitcoinlib', MagicMock()),
+    'bitcoinlib.keys': _conftest_mocks.get('bitcoinlib.keys', MagicMock()),
     'bitcoinlib.wallets': MagicMock(),
-    'mnemonic': MagicMock()
+    'mnemonic': _conftest_mocks.get('mnemonic', MagicMock())
 }):
     from Src.services.cardano_service import CardanoService
     from Src.services.bitcoin_service import BitcoinService
@@ -98,14 +113,8 @@ class TestCardanoService(unittest.TestCase):
                 'address_type': 'payment_stake'
             }
             
-            # Patch the imported ExtendedSigningKey class in the service module
-            with patch('Src.services.cardano_service.ExtendedSigningKey') as mock_esk:
-                # Configure the mock to return proper string JSON
-                mock_key_instance = Mock()
-                mock_key_instance.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
-                mock_esk.from_hdwallet.return_value = mock_key_instance
-                
-                result = self.service.extract_keys(derivation_info, output_dir)
+            # The global mock from conftest.py should handle this automatically
+            result = self.service.extract_keys(derivation_info, output_dir)
             
             self.assertIn('payment_key_file', result)
             self.assertIn('stake_key_file', result)

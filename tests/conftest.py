@@ -96,25 +96,49 @@ mock_derived_key.__len__ = Mock(return_value=32)
 
 mock_hdwallet = MagicMock()
 mock_hdwallet.derive_from_path = Mock(return_value=mock_derived_key)
-mock_pycardano.HDWallet = MagicMock()
-mock_pycardano.HDWallet.from_mnemonic = Mock(return_value=mock_hdwallet)
+mock_hdwallet_class = MagicMock()
+mock_hdwallet_class.from_mnemonic = Mock(return_value=mock_hdwallet)
+mock_pycardano.HDWallet = mock_hdwallet_class
 
 # Create mock for Bitcoin libraries
 mock_bitcoinlib = MagicMock()
 mock_bitcoinlib.keys = MagicMock()
 
 # Create mock HDKey for Bitcoin tests with proper method returns
-def create_bitcoin_hdkey_mock(address_type="legacy"):
+def create_bitcoin_hdkey_mock(address_type="legacy", derivation_path=None):
     """Create a mock HDKey with proper address and WIF generation"""
     mock_key = MagicMock()
     
-    # Configure address generation based on type
-    if address_type == "legacy":
-        mock_key.address = lambda: "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
-    elif address_type == "segwit":
-        mock_key.address = lambda: "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
-    else:  # native_segwit
-        mock_key.address = lambda: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+    # Generate different addresses based on derivation path to simulate real behavior
+    if derivation_path:
+        import hashlib
+        # Generate a deterministic but unique address based on the path
+        path_hash = hashlib.md5(derivation_path.encode()).hexdigest()
+        
+        if address_type == "legacy":
+            # Create a valid legacy address format starting with '1'
+            # Use the first few characters of hash to make it unique
+            unique_part = path_hash[:6]
+            fixed_address = f"1{unique_part}BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"[:34]
+            mock_key.address = lambda addr=fixed_address: addr
+        elif address_type == "segwit":
+            # Create a valid segwit address format starting with '3'
+            unique_part = path_hash[:6]
+            fixed_address = f"3{unique_part}J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"[:34]
+            mock_key.address = lambda addr=fixed_address: addr
+        else:  # native_segwit
+            # Create a valid native segwit address format starting with 'bc1q'
+            unique_part = path_hash[:10]
+            fixed_address = f"bc1q{unique_part}ar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"[:42]
+            mock_key.address = lambda addr=fixed_address: addr
+    else:
+        # Default addresses (fallback)
+        if address_type == "legacy":
+            mock_key.address = lambda: "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
+        elif address_type == "segwit":
+            mock_key.address = lambda: "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+        else:  # native_segwit
+            mock_key.address = lambda: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
     
     # Configure WIF generation (always compressed for newer types)
     if address_type == "legacy":
@@ -127,21 +151,33 @@ def create_bitcoin_hdkey_mock(address_type="legacy"):
 # Create the main HDKey mock
 mock_bitcoin_hdkey = create_bitcoin_hdkey_mock("legacy")
 
+# Create a cache to ensure same path always returns same address
+_mock_key_cache = {}
+
 # Configure subkey_for_path to return appropriate mocks based on derivation path
 def mock_subkey_for_path(path):
+    # Use cache to ensure consistent addresses for same paths
+    if path in _mock_key_cache:
+        return _mock_key_cache[path]
+    
     if "44'" in path:  # Legacy P2PKH
-        return create_bitcoin_hdkey_mock("legacy")
+        mock = create_bitcoin_hdkey_mock("legacy", path)
     elif "49'" in path:  # SegWit P2SH-P2WPKH
-        return create_bitcoin_hdkey_mock("segwit") 
+        mock = create_bitcoin_hdkey_mock("segwit", path)
     elif "84'" in path:  # Native SegWit P2WPKH
-        return create_bitcoin_hdkey_mock("native_segwit")
+        mock = create_bitcoin_hdkey_mock("native_segwit", path)
     else:
-        return create_bitcoin_hdkey_mock("legacy")  # Default fallback
+        mock = create_bitcoin_hdkey_mock("legacy", path)  # Default fallback
+    
+    _mock_key_cache[path] = mock
+    return mock
 
 mock_bitcoin_hdkey.subkey_for_path = mock_subkey_for_path
 
-mock_bitcoinlib.keys.HDKey = MagicMock()
-mock_bitcoinlib.keys.HDKey.from_seed = Mock(return_value=mock_bitcoin_hdkey)
+# Configure HDKey as a class-like mock
+mock_hdkey_class = MagicMock()
+mock_hdkey_class.from_seed = Mock(return_value=mock_bitcoin_hdkey)
+mock_bitcoinlib.keys.HDKey = mock_hdkey_class
 
 # Mock base58 for address and WIF validation
 mock_base58 = MagicMock()
@@ -166,6 +202,8 @@ mock_base58.b58decode_check = Mock(side_effect=mock_b58decode_check)
 
 sys.modules['pycardano'] = mock_pycardano
 sys.modules['pycardano.key'] = mock_pycardano.key
+# Also ensure direct attribute access works
+mock_pycardano.key = mock_pycardano.key
 sys.modules['bitcoinlib'] = mock_bitcoinlib
 sys.modules['bitcoinlib.keys'] = mock_bitcoinlib.keys
 sys.modules['base58'] = mock_base58
