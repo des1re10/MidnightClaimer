@@ -195,8 +195,15 @@ These tools bypass portal issues by:
 
 If these tools helped you successfully claim your Midnight tokens:
 
+### QR Codes for Easy Donations:
+
 **Bitcoin**: `bc1qkj9f592hlj3m26eukc54xruls6pdzqs70ly8a5`
+
+![BTC Donation QR Code](donations/donation_qr_btc.png)
+
 **Cardano**: `addr1qxk3cq8emwuusdlas04yn0qf3xndd6ts6ta7l3kh4vphuhss0y3k3y7r4ztz6xy0xjysj4j9ksysnlhnp0stqdwwyusq9g5th3`
+
+![ADA Donation QR Code](donations/donation_qr_ada.png)
 
 Tips help maintain and improve these tools for the community.
 

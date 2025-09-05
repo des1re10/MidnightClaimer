@@ -342,12 +342,9 @@ This tool has been tested with:
 
 ## 💝 Support This Project
 
-If this tool helped you successfully claim your Midnight tokens, consider sending a small tip:
+If this tool helped you successfully claim your Midnight tokens, consider supporting the project! 
 
-**Bitcoin**: `bc1qkj9f592hlj3m26eukc54xruls6pdzqs70ly8a5`
-**Cardano**: `addr1qxk3cq8emwuusdlas04yn0qf3xndd6ts6ta7l3kh4vphuhss0y3k3y7r4ztz6xy0xjysj4j9ksysnlhnp0stqdwwyusq9g5th3`
-
-*Tips help maintain this project and keep it updated for the community!*
+*Donation addresses are available in the main README file.*
 
 ## 🆘 Support
 
