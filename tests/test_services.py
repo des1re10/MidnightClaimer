@@ -10,36 +10,9 @@ from pathlib import Path
 import tempfile
 import os
 
-# Mock the dependencies that might not be available in test environment
-# Use the mocks from conftest.py if they exist, otherwise create simple ones
-import sys
-_conftest_mocks = {}
-if 'pycardano' in sys.modules:
-    _conftest_mocks['pycardano'] = sys.modules['pycardano']
-if 'pycardano.key' in sys.modules:
-    _conftest_mocks['pycardano.key'] = sys.modules['pycardano.key']
-if 'bitcoinlib' in sys.modules:
-    _conftest_mocks['bitcoinlib'] = sys.modules['bitcoinlib']
-if 'bitcoinlib.keys' in sys.modules:
-    _conftest_mocks['bitcoinlib.keys'] = sys.modules['bitcoinlib.keys']
-if 'mnemonic' in sys.modules:
-    _conftest_mocks['mnemonic'] = sys.modules['mnemonic']
-
-# Fill in any missing mocks with simple MagicMocks
-with patch.dict('sys.modules', {
-    'pycardano': _conftest_mocks.get('pycardano', MagicMock()),
-    'pycardano.HDWallet': MagicMock(),
-    'pycardano.PaymentVerificationKey': MagicMock(),
-    'pycardano.Address': MagicMock(),
-    'pycardano.Network': MagicMock(),
-    'pycardano.key': _conftest_mocks.get('pycardano.key', MagicMock()),
-    'bitcoinlib': _conftest_mocks.get('bitcoinlib', MagicMock()),
-    'bitcoinlib.keys': _conftest_mocks.get('bitcoinlib.keys', MagicMock()),
-    'bitcoinlib.wallets': MagicMock(),
-    'mnemonic': _conftest_mocks.get('mnemonic', MagicMock())
-}):
-    from Src.services.cardano_service import CardanoService
-    from Src.services.bitcoin_service import BitcoinService
+# Import services directly - conftest.py handles all mocking
+from Src.services.cardano_service import CardanoService
+from Src.services.bitcoin_service import BitcoinService
 
 class TestCardanoService(unittest.TestCase):
     """Tests for CardanoService"""
@@ -104,28 +77,50 @@ class TestCardanoService(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
             
-            # Create proper mocks that return JSON strings like the conftest.py mocks
-            mock_payment_wallet = Mock()
-            mock_payment_wallet.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
-            
-            mock_stake_wallet = Mock()
-            mock_stake_wallet.to_json.return_value = '{"type": "StakeExtendedSigningKeyShelley_ed25519", "description": "Stake Signing Key", "cborHex": "5880123456"}'
-            
-            # Mock derivation info
-            valid_address = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
-            derivation_info = {
-                'address': valid_address,
-                'derived_payment_wallet': mock_payment_wallet,
-                'derived_stake_wallet': mock_stake_wallet,
-                'address_type': 'payment_stake'
-            }
-            
-            # Extract keys with proper mocks that return JSON strings
-            result = self.service.extract_keys(derivation_info, output_dir)
-            
-            self.assertIn('payment_key_file', result)
-            self.assertIn('stake_key_file', result)
-            self.assertEqual(result['address'], valid_address)
+            # Ensure proper ExtendedSigningKey mock in case conftest.py was corrupted
+            with patch('Src.services.cardano_service.ExtendedSigningKey') as mock_extended_signing_key:
+                # Create mocks that return proper JSON strings
+                mock_payment_key = Mock()
+                mock_payment_key.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
+                
+                mock_stake_key = Mock()
+                mock_stake_key.to_json.return_value = '{"type": "StakeExtendedSigningKeyShelley_ed25519", "description": "Stake Signing Key", "cborHex": "5880123456"}'
+                
+                def mock_from_hdwallet(wallet):
+                    # Return appropriate mock based on which wallet is passed
+                    if 'payment' in str(wallet) or wallet == mock_payment_wallet:
+                        return mock_payment_key
+                    else:
+                        return mock_stake_key
+                
+                mock_extended_signing_key.from_hdwallet.side_effect = mock_from_hdwallet
+                
+                # Create wallet mocks (these are the HDWallet objects) 
+                mock_payment_wallet = Mock()
+                mock_stake_wallet = Mock()
+                
+                # Mock derivation info
+                valid_address = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
+                derivation_info = {
+                    'address': valid_address,
+                    'derived_payment_wallet': mock_payment_wallet,
+                    'derived_stake_wallet': mock_stake_wallet,
+                    'address_type': 'payment_stake'
+                }
+                
+                # Mock the CLI conversion method
+                with patch.object(self.service, 'convert_to_cli_format') as mock_convert:
+                    mock_convert.return_value = {
+                        'cli_payment_file': '/tmp/test_payment.skey',
+                        'cli_stake_file': '/tmp/test_stake.skey'
+                    }
+                    
+                    # Extract keys with proper mocks
+                    result = self.service.extract_keys(derivation_info, output_dir)
+                    
+                    self.assertIn('payment_key_file', result)
+                    self.assertIn('stake_key_file', result)
+                    self.assertEqual(result['address'], valid_address)
 
 class TestBitcoinService(unittest.TestCase):
     """Tests for BitcoinService"""

@@ -330,6 +330,10 @@ def ensure_crypto_mock_consistency():
 
     # Ensure attributes are present on pycardano mock
     mock_pycardano.HDWallet = mock_hdwallet_class
+    
+    # Reset and reconfigure ExtendedSigningKey mock
+    mock_extended_signing_key_class.from_hdwallet.side_effect = mock_from_hdwallet
+    mock_pycardano.key.ExtendedSigningKey = mock_extended_signing_key_class
 
     yield
 
