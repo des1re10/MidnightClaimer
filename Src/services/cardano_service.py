@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 Cardano Service Layer for MidnightClaimer GUI
-Extracted from midnight_claim_cardano.py for use in GUI application
+Extracted from midnight_claim_cardano.py with integrated CLI conversion
 """
 
 import os
+import json
 import unicodedata
 import logging
 from pathlib import Path
@@ -17,11 +18,13 @@ import re
 logger = logging.getLogger(__name__)
 
 class CardanoService:
-    """Service class for Cardano key derivation and validation"""
+    """Service class for Cardano key derivation and validation with CLI conversion"""
     
     def __init__(self):
         self.network = Network.MAINNET
         self.mnemo = Mnemonic("english")
+        # Use consistent workspace path matching working script
+        self.workspace_base = Path(r"D:\workspace\VisualStudio\Midnight Claim")
         
     def validate_seed_phrase(self, seed_phrase: str) -> bool:
         """Validate mnemonic seed phrase"""
@@ -169,19 +172,10 @@ class CardanoService:
     ) -> Optional[Dict]:
         """
         Comprehensive derivation test with progress updates
-        
-        Args:
-            seed_phrase: The mnemonic seed phrase
-            passphrase: The passphrase (can be empty)
-            claim_address: Target address to match
-            stake_checksum: Expected stake key checksum
-            progress_callback: Function to call with progress updates (message, percentage)
-            
-        Returns:
-            Dictionary with derivation details if successful, None otherwise
+        Based on the working midnight_claim_cardano.py logic
         """
         if progress_callback:
-            progress_callback("Starting comprehensive derivation test...", 0)
+            progress_callback("Starting comprehensive Cardano derivation test...", 0)
         
         # Validate inputs first
         if not self.validate_seed_phrase(seed_phrase):
@@ -202,7 +196,10 @@ class CardanoService:
             logger.error(f"Invalid stake checksum format: {stake_checksum}")
             return None
         
-        # Passphrase scenarios to test
+        logger.info(f"Target address: {claim_address}")
+        logger.info(f"Expected stake checksum: {stake_checksum}")
+        
+        # Test different passphrase scenarios (from working script)
         passphrase_scenarios = [
             ("current_passphrase", passphrase),
             ("empty_passphrase", ""),
@@ -219,10 +216,13 @@ class CardanoService:
             if progress_callback:
                 progress_callback(f"Testing {scenario_name}...", int(current_combination / total_combinations * 100))
             
+            logger.info(f"--- Testing {scenario_name} ---")
+            
             try:
                 wallet = self._create_cardano_wallet(seed_phrase, test_passphrase)
                 if not wallet:
                     current_combination += 5 * 3 * 20  # Skip this scenario's combinations
+                    logger.error(f"Wallet creation failed for {scenario_name}")
                     continue
                 
                 # Test different account indices for payment path
@@ -246,12 +246,16 @@ class CardanoService:
                             current_combination += 3 * 20  # Skip this account's combinations
                             continue
                         
-                        # Test payment-only address
+                        # Test payment-only address first
                         address_v = Address(payment_vkey.hash(), None, self.network)
+                        
+                        if account == 0:  # Log first account for debugging
+                            logger.info(f"Account {account} payment-only: {str(address_v)[:20]}...")
                         
                         if str(address_v) == claim_address:
                             if progress_callback:
-                                progress_callback("Payment match found!", 100)
+                                progress_callback("Payment-only match found!", 100)
+                            logger.info(f"PAYMENT MATCH! Scenario: {scenario_name}, Account: {account}")
                             return self._create_result(
                                 account, 0, None, payment_path, None,
                                 derived_payment, None, str(address_v), 'payment_only',
@@ -287,20 +291,25 @@ class CardanoService:
                                     
                                     stake_hash = stake_vkey.hash().payload.hex()
                                     
-                                    # Validate stake hash format
-                                    if not stake_hash or len(stake_hash) != 56:  # 28 bytes = 56 hex chars
-                                        continue
+                                    # Log some examples for debugging
+                                    if account == 0 and stake_account == 0 and stake_index < 5 and scenario_name == "current_passphrase":
+                                        logger.info(f"Stake {stake_account}/{stake_index}: {stake_hash[:16]}...")
                                     
                                     if stake_hash.lower() == stake_checksum.lower():
                                         if progress_callback:
                                             progress_callback("Stake checksum match found!", 75)
                                         
+                                        logger.info(f"STAKE CHECKSUM MATCH! Scenario: {scenario_name}")
+                                        logger.info(f"  Payment Account: {account}, Stake Account: {stake_account}, Stake Index: {stake_index}")
+                                        
                                         # Create complete address
                                         address_q = Address(payment_vkey.hash(), stake_vkey.hash(), self.network)
+                                        logger.info(f"Complete address: {address_q}")
                                         
                                         if str(address_q) == claim_address:
                                             if progress_callback:
                                                 progress_callback("Perfect match found!", 100)
+                                            logger.info("PERFECT MATCH! Complete derivation found!")
                                             return self._create_result(
                                                 account, 0, stake_index, payment_path, stake_path,
                                                 derived_payment, derived_stake, str(address_q), 'payment_stake',
@@ -325,6 +334,7 @@ class CardanoService:
         
         if progress_callback:
             progress_callback("No matching derivation found", 100)
+        logger.error("No matching derivation found across all scenarios")
         return None
     
     def _create_result(self, account: int, payment_index: int, stake_index: Optional[int],
@@ -349,7 +359,7 @@ class CardanoService:
         if not self.validate_cardano_address_format(address):
             raise ValueError(f"Invalid address: {address}")
         
-        logger.info("Cardano derivation match found!")
+        logger.info("MATCH FOUND!")
         logger.info(f"  Payment Path: {payment_path}")
         if stake_path:
             logger.info(f"  Stake Path: {stake_path}")
@@ -370,14 +380,103 @@ class CardanoService:
             'passphrase_used': passphrase_used
         }
     
-    def extract_keys(self, derivation_info: Dict, output_dir: Path) -> Dict[str, str]:
+    def convert_to_cli_format(self, pycardano_files: Dict[str, str], output_dir: Path) -> Dict[str, str]:
         """
-        Extract private keys and save to files
-        
-        Returns:
-            Dictionary with file paths and key information
+        Convert PyCardano keys to CLI format for Eternl compatibility
+        Based on the working cli_convert.py script
         """
         try:
+            logger.info("Converting keys to CLI format...")
+            
+            cli_files = {}
+            
+            # Convert payment key
+            if 'payment_key_file' in pycardano_files:
+                payment_file = Path(pycardano_files['payment_key_file'])
+                
+                if not payment_file.exists():
+                    raise FileNotFoundError(f"Payment key file not found: {payment_file}")
+                
+                logger.info(f"Converting payment key: {payment_file.name}")
+                
+                # Read PyCardano payment key
+                with open(payment_file, 'r') as f:
+                    payment_data = json.load(f)
+                
+                # Convert to CLI format
+                cli_payment = {
+                    "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32",
+                    "description": "Payment Signing Key",
+                    "cborHex": payment_data.get('cborHex', '')
+                }
+                
+                if not cli_payment["cborHex"]:
+                    raise ValueError("Payment key missing cborHex data")
+                
+                # Save CLI format payment key
+                cli_payment_file = output_dir / "midnight_payment_cli.skey"
+                with open(cli_payment_file, 'w') as f:
+                    json.dump(cli_payment, f, indent=2)
+                
+                # Set restrictive permissions
+                os.chmod(cli_payment_file, 0o600)
+                
+                cli_files['cli_payment_file'] = str(cli_payment_file)
+                logger.info(f"CLI payment key saved: {cli_payment_file.name}")
+            
+            # Convert stake key if present
+            if 'stake_key_file' in pycardano_files and pycardano_files['stake_key_file']:
+                stake_file = Path(pycardano_files['stake_key_file'])
+                
+                if not stake_file.exists():
+                    raise FileNotFoundError(f"Stake key file not found: {stake_file}")
+                
+                logger.info(f"Converting stake key: {stake_file.name}")
+                
+                # Read PyCardano stake key
+                with open(stake_file, 'r') as f:
+                    stake_data = json.load(f)
+                
+                # Convert to CLI format
+                cli_stake = {
+                    "type": "StakeExtendedSigningKeyShelley_ed25519_bip32",
+                    "description": "Stake Signing Key", 
+                    "cborHex": stake_data.get('cborHex', '')
+                }
+                
+                if not cli_stake["cborHex"]:
+                    raise ValueError("Stake key missing cborHex data")
+                
+                # Save CLI format stake key
+                cli_stake_file = output_dir / "midnight_stake_cli.skey"
+                with open(cli_stake_file, 'w') as f:
+                    json.dump(cli_stake, f, indent=2)
+                
+                # Set restrictive permissions
+                os.chmod(cli_stake_file, 0o600)
+                
+                cli_files['cli_stake_file'] = str(cli_stake_file)
+                logger.info(f"CLI stake key saved: {cli_stake_file.name}")
+            
+            logger.info("CLI format conversion completed successfully")
+            return cli_files
+            
+        except Exception as e:
+            logger.error(f"CLI conversion failed: {e}")
+            raise ValueError(f"CLI conversion failed: {e}")
+    
+    def extract_keys(self, derivation_info: Dict, output_dir: Path) -> Dict[str, str]:
+        """
+        Extract private keys, save to files, and convert to CLI format
+        
+        Returns:
+            Dictionary with file paths and key information including CLI files
+        """
+        try:
+            # Ensure output directory exists with proper permissions
+            output_dir.mkdir(parents=True, exist_ok=True)
+            os.chmod(output_dir, 0o700)
+            
             address = derivation_info['address']
             payment_wallet = derivation_info['derived_payment_wallet']
             stake_wallet = derivation_info.get('derived_stake_wallet')
@@ -388,6 +487,8 @@ class CardanoService:
             
             safe_addr = address[:12]
             process_id = os.getpid()
+            
+            logger.info("Extracting Cardano private keys...")
             
             # Payment Key
             try:
@@ -405,6 +506,7 @@ class CardanoService:
                 
                 # Set restrictive permissions
                 os.chmod(payment_skey_file, 0o600)
+                logger.info(f"Payment key saved: {payment_skey_file.name}")
                 
             except Exception as e:
                 logger.error(f"Payment key extraction failed: {e}")
@@ -428,24 +530,45 @@ class CardanoService:
                     
                     # Set restrictive permissions
                     os.chmod(stake_skey_file, 0o600)
+                    logger.info(f"Stake key saved: {stake_skey_file.name}")
                     
                 except Exception as e:
                     logger.error(f"Stake key extraction failed: {e}")
                     raise ValueError(f"Stake key extraction failed: {e}")
             
-            return {
+            # Prepare PyCardano files for CLI conversion
+            pycardano_files = {
+                'payment_key_file': str(payment_skey_file),
+                'stake_key_file': str(stake_skey_file) if stake_skey_file else None
+            }
+            
+            # Convert to CLI format (CRITICAL STEP)
+            try:
+                cli_files = self.convert_to_cli_format(pycardano_files, output_dir)
+                logger.info("CLI format conversion successful")
+            except Exception as e:
+                logger.error(f"CLI conversion failed: {e}")
+                raise ValueError(f"CLI conversion failed: {e}")
+            
+            # Combine all file information
+            result = {
                 'payment_key_file': str(payment_skey_file),
                 'stake_key_file': str(stake_skey_file) if stake_skey_file else None,
+                'cli_payment_file': cli_files.get('cli_payment_file'),
+                'cli_stake_file': cli_files.get('cli_stake_file'),
                 'address': address,
                 'derivation_info': derivation_info
             }
+            
+            logger.info("Key extraction completed successfully")
+            return result
             
         except Exception as e:
             logger.error(f"Key extraction error: {e}")
             raise
     
     def create_instructions_file(self, key_info: Dict, output_dir: Path) -> str:
-        """Create instruction file for user"""
+        """Create comprehensive instruction file for user"""
         safe_addr = key_info['address'][:12]
         process_id = os.getpid()
         
@@ -463,20 +586,29 @@ class CardanoService:
             f.write(f"Address Type: {key_info['derivation_info']['address_type']}\n")
             f.write(f"Scenario Used: {key_info['derivation_info']['scenario_name']}\n\n")
             
-            f.write("PRIVATE KEY FILES:\n")
-            f.write(f"Payment Key: {Path(key_info['payment_key_file']).name}\n")
+            f.write("GENERATED FILES:\n")
+            f.write("=" * 30 + "\n")
+            f.write("PyCardano Format (DO NOT USE FOR IMPORT):\n")
+            f.write(f"  Payment Key: {Path(key_info['payment_key_file']).name}\n")
             if key_info['stake_key_file']:
-                f.write(f"Stake Key: {Path(key_info['stake_key_file']).name}\n")
+                f.write(f"  Stake Key: {Path(key_info['stake_key_file']).name}\n")
+            f.write("\n")
+            
+            f.write("CLI Format (USE THESE FOR ETERNL IMPORT):\n")
+            f.write(f"  Payment Key: {Path(key_info['cli_payment_file']).name}\n")
+            if key_info['cli_stake_file']:
+                f.write(f"  Stake Key: {Path(key_info['cli_stake_file']).name}\n")
             f.write("\n")
             
             f.write("ETERNL IMPORT INSTRUCTIONS:\n")
             f.write("=" * 50 + "\n")
+            f.write("CRITICAL: Use ONLY the CLI format files (midnight_*_cli.skey)\n\n")
             f.write("1. Open Eternl Wallet (https://eternl.io)\n")
-            f.write("2. 'Add Wallet' → 'Restore' → 'Advanced'\n")
+            f.write("2. 'Add Wallet' -> 'Restore' -> 'Advanced'\n")
             f.write("3. Select 'Import from CLI signing key'\n")
-            f.write(f"4. Upload file: {Path(key_info['payment_key_file']).name}\n")
-            if key_info['stake_key_file']:
-                f.write(f"5. Upload stake key: {Path(key_info['stake_key_file']).name}\n")
+            f.write(f"4. Upload CLI payment key: {Path(key_info['cli_payment_file']).name}\n")
+            if key_info['cli_stake_file']:
+                f.write(f"5. Upload CLI stake key: {Path(key_info['cli_stake_file']).name}\n")
                 f.write("6. Wallet name: 'Midnight Claim'\n")
                 f.write("7. Create wallet\n")
             else:
@@ -486,24 +618,35 @@ class CardanoService:
             f.write("8. Connect to Midnight Portal\n")
             f.write("9. Execute claim\n\n")
             
+            f.write("TROUBLESHOOTING:\n")
+            f.write("=" * 30 + "\n")
+            f.write("If Eternl says 'Initialisiere acc#0':\n")
+            f.write("- You may have uploaded PyCardano format instead of CLI format\n")
+            f.write("- Make sure to use the *_cli.skey files\n")
+            f.write("- Try alternative wallets (Typhon, Nami) if issues persist\n\n")
+            
             f.write("SECURITY REQUIREMENTS - IMMEDIATELY AFTER CLAIMING:\n")
             f.write("=" * 50 + "\n")
             f.write(f"1. DELETE: {Path(key_info['payment_key_file']).name}\n")
+            f.write(f"2. DELETE: {Path(key_info['cli_payment_file']).name}\n")
             if key_info['stake_key_file']:
-                f.write(f"2. DELETE: {Path(key_info['stake_key_file']).name}\n")
-            f.write("3. Delete Eternl wallet\n")
-            f.write("4. Transfer Midnight tokens to NEW secure hardware wallet\n")
-            f.write("5. Delete entire project folder\n")
-            f.write("6. Clear browser cache/history\n")
-            f.write("7. Restart computer to clear memory\n")
-            f.write("8. Abandon OLD wallet completely\n\n")
+                f.write(f"3. DELETE: {Path(key_info['stake_key_file']).name}\n")
+                f.write(f"4. DELETE: {Path(key_info['cli_stake_file']).name}\n")
+            f.write("5. Delete Eternl wallet\n")
+            f.write("6. Transfer Midnight tokens to NEW secure hardware wallet\n")
+            f.write("7. Delete entire project folder\n")
+            f.write("8. Clear browser cache/history\n")
+            f.write("9. Restart computer to clear memory\n")
+            f.write("10. Abandon OLD wallet completely\n\n")
             
             f.write("SECURITY REMINDER:\n")
             f.write("- Your OLD wallet seed is now compromised\n")
             f.write("- Never use OLD wallet addresses for receiving anything\n")
             f.write("- All future transactions should use your NEW secure wallet\n")
+            f.write("- The CLI format files are what Eternl needs - do not use PyCardano format\n")
         
         # Set restrictive permissions on instructions file
         os.chmod(instructions_file, 0o600)
         
+        logger.info(f"Instructions saved: {instructions_file.name}")
         return str(instructions_file)

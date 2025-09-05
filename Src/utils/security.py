@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Security utilities for MidnightClaimer GUI
-Handles secure data management, cleanup, and validation
+Enhanced version with better integration and validation
 """
 
 import os
@@ -14,6 +14,7 @@ import secrets
 import tempfile
 import shutil
 import re
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ class SecureEntry(tk.Entry):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, show="*", **kwargs)
         self._secure_content = ""
+        self._original_get = super().get
+        self._original_insert = super().insert
+        self._original_delete = super().delete
     
     def get(self):
         """Override get to return secure content"""
@@ -32,13 +36,13 @@ class SecureEntry(tk.Entry):
         """Override insert to track secure content"""
         super().insert(index, string)
         # Update secure content tracking
-        current = super().get()
+        current = self._original_get()
         self._secure_content = current
     
     def delete(self, first, last=None):
         """Override delete to update secure content"""
         super().delete(first, last)
-        current = super().get()
+        current = self._original_get()
         self._secure_content = current
     
     def secure_clear(self):
@@ -47,16 +51,21 @@ class SecureEntry(tk.Entry):
         Note: Python's garbage collector limitations mean sensitive strings 
         may persist in memory despite overwriting attempts
         """
-        # Overwrite memory with random data
-        if self._secure_content:
-            random_data = ''.join(secrets.choice('0123456789abcdef') 
-                                 for _ in range(len(self._secure_content)))
-            self.delete(0, tk.END)
-            self.insert(0, random_data)
-            self.delete(0, tk.END)
-        
-        # Clear tracking variable
-        self._secure_content = ""
+        try:
+            # Overwrite memory with random data
+            if self._secure_content:
+                random_data = ''.join(secrets.choice('0123456789abcdef') 
+                                     for _ in range(len(self._secure_content)))
+                self.delete(0, tk.END)
+                self.insert(0, random_data)
+                self.delete(0, tk.END)
+            
+            # Clear tracking variable
+            self._secure_content = ""
+            logger.debug("SecureEntry cleared")
+            
+        except Exception as e:
+            logger.warning(f"SecureEntry clear failed: {e}")
 
 class SecureText(tk.Text):
     """A secure text widget for seed phrases that can be securely cleared"""
@@ -65,9 +74,23 @@ class SecureText(tk.Text):
         super().__init__(parent, **kwargs)
         self._secure_content = ""
         self.bind('<KeyRelease>', self._on_key_release)
+        self.bind('<Button-1>', self._on_click)
+        self.bind('<Control-v>', self._on_paste)
     
     def _on_key_release(self, event):
         """Update secure content tracking"""
+        self._secure_content = super().get("1.0", tk.END).strip()
+    
+    def _on_click(self, event):
+        """Update secure content on click"""
+        self.after_idle(self._update_content)
+    
+    def _on_paste(self, event):
+        """Update secure content on paste"""
+        self.after_idle(self._update_content)
+    
+    def _update_content(self):
+        """Update secure content"""
         self._secure_content = super().get("1.0", tk.END).strip()
     
     def get(self, start, end=None):
@@ -82,37 +105,57 @@ class SecureText(tk.Text):
         Note: Python's garbage collector limitations mean sensitive strings 
         may persist in memory despite overwriting attempts
         """
-        # Overwrite memory with random data
-        if self._secure_content:
-            # Generate random seed phrase of same length
-            words = self._secure_content.split()
-            random_words = [secrets.token_hex(4) for _ in words]
-            random_phrase = ' '.join(random_words)
+        try:
+            # Overwrite memory with random data
+            if self._secure_content:
+                # Generate random seed phrase of same length
+                words = self._secure_content.split()
+                random_words = [secrets.token_hex(4) for _ in words]
+                random_phrase = ' '.join(random_words)
+                
+                self.delete("1.0", tk.END)
+                self.insert("1.0", random_phrase)
+                self.delete("1.0", tk.END)
             
-            self.delete("1.0", tk.END)
-            self.insert("1.0", random_phrase)
-            self.delete("1.0", tk.END)
-        
-        # Clear tracking variable
-        self._secure_content = ""
+            # Clear tracking variable
+            self._secure_content = ""
+            logger.debug("SecureText cleared")
+            
+        except Exception as e:
+            logger.warning(f"SecureText clear failed: {e}")
 
 class SecurityManager:
-    """Manages security aspects of the application"""
+    """Enhanced security manager for the application"""
     
     def __init__(self):
         self.temp_files: List[Path] = []
         self.secure_widgets: List[tk.Widget] = []
         self.workspace_dir: Optional[Path] = None
+        self._cleanup_performed = False
     
     def create_secure_workspace(self) -> Path:
         """Create a secure temporary workspace directory"""
         try:
             # Create temp directory with secure permissions
-            temp_dir = tempfile.mkdtemp(prefix="midnight_claim_")
-            workspace = Path(temp_dir)
+            # Use the same base path as the services for consistency
+            base_workspace = Path(r"D:\workspace\VisualStudio\Midnight Claim")
+            
+            # Create unique subdirectory with timestamp and random component
+            import time
+            timestamp = int(time.time())
+            random_suffix = secrets.token_hex(4)
+            workspace_name = f"gui_session_{timestamp}_{random_suffix}"
+            
+            workspace = base_workspace / workspace_name
+            workspace.mkdir(parents=True, exist_ok=True)
             
             # Set restrictive permissions (owner only)
-            os.chmod(workspace, 0o700)
+            if os.name == 'nt':  # Windows
+                # Windows doesn't support chmod the same way, use alternative approach
+                import stat
+                os.chmod(workspace, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+            else:  # Unix-like systems
+                os.chmod(workspace, 0o700)
             
             self.workspace_dir = workspace
             logger.info(f"Created secure workspace: {workspace}")
@@ -124,11 +167,15 @@ class SecurityManager:
     
     def register_temp_file(self, file_path: Path):
         """Register a temporary file for cleanup"""
-        self.temp_files.append(file_path)
+        if file_path not in self.temp_files:
+            self.temp_files.append(file_path)
+            logger.debug(f"Registered temp file: {file_path.name}")
     
     def register_secure_widget(self, widget: tk.Widget):
         """Register a secure widget for cleanup"""
-        self.secure_widgets.append(widget)
+        if widget not in self.secure_widgets:
+            self.secure_widgets.append(widget)
+            logger.debug(f"Registered secure widget: {type(widget).__name__}")
     
     def show_memory_warning(self) -> bool:
         """Show warning about Python memory management limitations"""
@@ -138,15 +185,45 @@ class SecurityManager:
             "• Sensitive strings may persist in memory despite clearing attempts\n"
             "• Garbage collection timing is unpredictable\n"
             "• Memory pages may be swapped to disk\n\n"
-            "RECOMMENDATIONS:\n"
+            "SECURITY RECOMMENDATIONS:\n"
             "• Use this tool on an isolated, air-gapped computer\n"
             "• Restart the computer after claiming tokens\n"
             "• Consider using a live USB operating system\n"
-            "• Never use this on a shared or public computer\n\n"
+            "• Never use this on a shared or public computer\n"
+            "• Close all unnecessary applications before proceeding\n\n"
+            "The tool implements multiple security layers:\n"
+            "• Secure workspace with restricted permissions\n"
+            "• Multi-pass file deletion\n"
+            "• Memory overwrite attempts\n"
+            "• Automatic cleanup on exit\n\n"
             "Do you understand and accept these limitations?"
         )
         
         return messagebox.askyesno("Memory Security Warning", warning_message)
+    
+    def get_cleanup_summary(self) -> str:
+        """Get summary of items to be cleaned up"""
+        summary_items = []
+        
+        if self.temp_files:
+            summary_items.append(f"{len(self.temp_files)} temporary files")
+        
+        if self.workspace_dir and self.workspace_dir.exists():
+            # Count files in workspace
+            try:
+                workspace_files = list(self.workspace_dir.rglob('*'))
+                file_count = len([f for f in workspace_files if f.is_file()])
+                if file_count > 0:
+                    summary_items.append(f"workspace directory with {file_count} files")
+                else:
+                    summary_items.append("empty workspace directory")
+            except:
+                summary_items.append("workspace directory")
+        
+        if self.secure_widgets:
+            summary_items.append(f"{len(self.secure_widgets)} secure input fields")
+        
+        return summary_items
     
     def secure_cleanup(self, show_confirmation: bool = True) -> bool:
         """
@@ -158,19 +235,16 @@ class SecurityManager:
         Returns:
             True if cleanup was successful
         """
+        if self._cleanup_performed:
+            logger.info("Cleanup already performed, skipping")
+            return True
+        
         try:
-            cleanup_items = []
-            
-            # Count items to clean
-            if self.temp_files:
-                cleanup_items.append(f"{len(self.temp_files)} temporary files")
-            if self.workspace_dir and self.workspace_dir.exists():
-                cleanup_items.append("workspace directory")
-            if self.secure_widgets:
-                cleanup_items.append(f"{len(self.secure_widgets)} secure widgets")
+            cleanup_items = self.get_cleanup_summary()
             
             if not cleanup_items:
                 logger.info("No items to clean up")
+                self._cleanup_performed = True
                 return True
             
             # Show confirmation if requested
@@ -182,13 +256,17 @@ class SecurityManager:
                 if not messagebox.askyesno("Secure Cleanup", message):
                     return False
             
+            cleanup_success = True
+            
             # Clean secure widgets
             for widget in self.secure_widgets:
                 try:
                     if hasattr(widget, 'secure_clear'):
                         widget.secure_clear()
+                        logger.debug(f"Cleared secure widget: {type(widget).__name__}")
                 except Exception as e:
                     logger.warning(f"Failed to clear secure widget: {e}")
+                    cleanup_success = False
             
             # Securely delete temporary files
             deleted_files = 0
@@ -197,36 +275,55 @@ class SecurityManager:
                     if file_path.exists():
                         self._secure_delete_file(file_path)
                         deleted_files += 1
+                        logger.debug(f"Deleted temp file: {file_path.name}")
                 except Exception as e:
                     logger.warning(f"Failed to delete {file_path}: {e}")
+                    cleanup_success = False
             
             # Remove workspace directory
             if self.workspace_dir and self.workspace_dir.exists():
                 try:
-                    shutil.rmtree(self.workspace_dir, ignore_errors=False)
+                    # First, secure delete all files in workspace
+                    for file_path in self.workspace_dir.rglob('*'):
+                        if file_path.is_file():
+                            try:
+                                self._secure_delete_file(file_path)
+                            except Exception as e:
+                                logger.warning(f"Failed to secure delete {file_path}: {e}")
+                    
+                    # Then remove directory structure
+                    shutil.rmtree(self.workspace_dir, ignore_errors=True)
                     logger.info(f"Deleted workspace directory: {self.workspace_dir}")
                 except Exception as e:
                     logger.warning(f"Failed to delete workspace: {e}")
+                    cleanup_success = False
             
             # Clear tracking lists
             self.temp_files.clear()
             self.secure_widgets.clear()
             self.workspace_dir = None
+            self._cleanup_performed = True
             
             logger.info(f"Secure cleanup completed: {deleted_files} files deleted")
             
             if show_confirmation:
-                messagebox.showinfo("Cleanup Complete", 
-                                   f"Successfully cleaned up {deleted_files} files and sensitive data.\n\n"
-                                   f"SECURITY REMINDER:\nRestart your computer to clear any remaining traces from memory.")
+                if cleanup_success:
+                    messagebox.showinfo("Cleanup Complete", 
+                                       f"Successfully cleaned up {deleted_files} files and sensitive data.\n\n"
+                                       f"SECURITY REMINDER:\nRestart your computer to clear any remaining traces from memory.")
+                else:
+                    messagebox.showwarning("Cleanup Partial", 
+                                         f"Cleanup completed with some warnings. Check the log file for details.\n\n"
+                                         f"SECURITY REMINDER:\nRestart your computer to clear any remaining traces from memory.")
             
-            return True
+            return cleanup_success
             
         except Exception as e:
             logger.error(f"Secure cleanup failed: {e}")
             if show_confirmation:
                 messagebox.showerror("Cleanup Failed", 
-                                   f"Failed to complete secure cleanup: {e}")
+                                   f"Failed to complete secure cleanup: {e}\n\n"
+                                   f"Please manually delete files and restart your computer.")
             return False
     
     def _secure_delete_file(self, file_path: Path):
@@ -235,15 +332,33 @@ class SecurityManager:
             if not file_path.exists():
                 return
             
+            # Get file size
             file_size = file_path.stat().st_size
             
-            # Overwrite file multiple times with random data
+            if file_size == 0:
+                # Empty file, just delete
+                os.remove(file_path)
+                return
+            
+            # Overwrite file multiple times with different patterns
             with open(file_path, 'r+b') as f:
-                for _ in range(3):  # Multiple passes
-                    f.seek(0)
-                    f.write(secrets.token_bytes(file_size))
-                    f.flush()
-                    os.fsync(f.fileno())  # Force write to disk
+                # Pass 1: All zeros
+                f.seek(0)
+                f.write(b'\x00' * file_size)
+                f.flush()
+                os.fsync(f.fileno())
+                
+                # Pass 2: All ones
+                f.seek(0)
+                f.write(b'\xFF' * file_size)
+                f.flush()
+                os.fsync(f.fileno())
+                
+                # Pass 3: Random data
+                f.seek(0)
+                f.write(secrets.token_bytes(file_size))
+                f.flush()
+                os.fsync(f.fileno())
             
             # Finally delete the file
             os.remove(file_path)
@@ -251,7 +366,13 @@ class SecurityManager:
             
         except Exception as e:
             logger.error(f"Failed to securely delete {file_path}: {e}")
-            raise
+            # Try normal deletion as fallback
+            try:
+                os.remove(file_path)
+                logger.debug(f"Fallback deleted: {file_path}")
+            except:
+                logger.error(f"Complete deletion failure: {file_path}")
+                raise
 
 def validate_seed_phrase_format(seed_phrase: str) -> tuple[bool, str]:
     """
@@ -349,4 +470,13 @@ def validate_bitcoin_wif(wif_key: str) -> tuple[bool, str]:
     if len(wif_key) < 51 or len(wif_key) > 52:
         return False, "WIF key has invalid length"
     
-    return True, ""
+    # Additional validation with base58 if available
+    try:
+        import base58
+        base58.b58decode_check(wif_key)
+        return True, ""
+    except ImportError:
+        # base58 not available, basic validation only
+        return True, ""
+    except Exception:
+        return False, "WIF key has invalid encoding"

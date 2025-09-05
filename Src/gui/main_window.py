@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Main GUI Window for MidnightClaimer
-Provides a user-friendly wizard interface for claiming Midnight tokens
+Updated to properly integrate with the fixed services
 """
 
 import tkinter as tk
@@ -11,35 +11,77 @@ from pathlib import Path
 from typing import Optional, Dict
 import threading
 import queue
+import sys
+import os
 
-from ..services.cardano_service import CardanoService
-from ..services.bitcoin_service import BitcoinService
-from ..utils.security import (
-    SecurityManager, SecureEntry, SecureText, 
-    validate_seed_phrase_format, validate_address_format, validate_stake_checksum
-)
+# Add current directory to path for imports
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
+
+# Import services and utilities
+try:
+    from ..services.cardano_service import CardanoService
+    from ..services.bitcoin_service import BitcoinService
+    from ..utils.security import (
+        SecurityManager, SecureEntry, SecureText, 
+        validate_seed_phrase_format, validate_address_format, validate_stake_checksum
+    )
+except ImportError as e:
+    # Try alternative import paths
+    try:
+        import sys
+        sys.path.append(str(Path(__file__).parent.parent))
+        from services.cardano_service import CardanoService
+        from services.bitcoin_service import BitcoinService
+        from utils.security import (
+            SecurityManager, SecureEntry, SecureText, 
+            validate_seed_phrase_format, validate_address_format, validate_stake_checksum
+        )
+    except ImportError:
+        print(f"Failed to import required modules: {e}")
+        print("Please ensure all service files are in the correct directories")
+        sys.exit(1)
 
 logger = logging.getLogger(__name__)
 
 class MidnightClaimerGUI:
-    """Main GUI application for MidnightClaimer"""
+    """Main GUI application for MidnightClaimer with integrated services"""
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("MidnightClaimer - Secure Token Claiming Tool")
-        self.root.geometry("800x600")
-        self.root.resizable(False, False)
+        
+        # Try to use config, fallback to hardcoded values
+        try:
+            from ..config import APP_TITLE, DEFAULT_WINDOW_SIZE, MIN_WINDOW_SIZE, GUI_RESIZABLE
+            self.root.title(APP_TITLE)
+            self.root.geometry(DEFAULT_WINDOW_SIZE)
+            self.root.minsize(*MIN_WINDOW_SIZE)
+            self.root.resizable(GUI_RESIZABLE, GUI_RESIZABLE)
+        except ImportError:
+            # Fallback to original values
+            self.root.title("MidnightClaimer - Secure Token Claiming Tool v1.0")
+            self.root.geometry("900x700")
+            self.root.resizable(True, True)
         
         # Services
-        self.cardano_service = CardanoService()
-        self.bitcoin_service = BitcoinService()
-        self.security_manager = SecurityManager()
+        try:
+            self.cardano_service = CardanoService()
+            self.bitcoin_service = BitcoinService()
+            self.security_manager = SecurityManager()
+            logger.info("Services initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize services: {e}")
+            messagebox.showerror("Initialization Error", f"Failed to initialize services: {e}")
+            self.root.destroy()
+            return
         
         # State
         self.current_step = 0
         self.claim_type = None
         self.derivation_result = None
+        self.key_extraction_result = None
         self.progress_queue = queue.Queue()
+        self.workspace_dir = None
         
         # Style
         self.setup_styles()
@@ -68,6 +110,7 @@ class MidnightClaimerGUI:
         style.configure("Warning.TLabel", font=("Arial", 10), foreground="red")
         style.configure("Success.TLabel", font=("Arial", 10), foreground="green")
         style.configure("Big.TButton", font=("Arial", 12), padding=10)
+        style.configure("Small.TButton", font=("Arial", 10), padding=5)
     
     def create_widgets(self):
         """Create the main widget structure"""
@@ -86,10 +129,14 @@ class MidnightClaimerGUI:
         self.header_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 20))
         self.header_frame.columnconfigure(1, weight=1)
         
-        # Progress bar
-        self.progress_var = tk.StringVar(value="Step 1 of 5: Welcome")
+        # Progress bar and status
+        self.progress_var = tk.StringVar(value="Step 1 of 6: Welcome")
         self.progress_label = ttk.Label(self.header_frame, textvariable=self.progress_var, style="Subtitle.TLabel")
         self.progress_label.grid(row=0, column=0, sticky=tk.W)
+        
+        # Workspace info
+        self.workspace_label = ttk.Label(self.header_frame, text="", style="Small.TButton")
+        self.workspace_label.grid(row=0, column=2, sticky=tk.E)
         
         # Content frame (will hold different screens)
         self.content_frame = ttk.Frame(self.main_frame)
@@ -110,17 +157,34 @@ class MidnightClaimerGUI:
         
         self.cancel_button = ttk.Button(self.button_frame, text="Cancel", command=self.on_closing)
         self.cancel_button.grid(row=0, column=3, padx=(10, 0))
+        
+        # Cleanup button (initially hidden)
+        self.cleanup_button = ttk.Button(self.button_frame, text="Secure Cleanup", 
+                                        command=self.manual_cleanup, style="Warning.TLabel")
+        self.cleanup_button.grid(row=0, column=4, padx=(10, 0))
+        self.cleanup_button.grid_remove()  # Hide initially
     
     def clear_content_frame(self):
         """Clear all widgets from content frame"""
         for widget in self.content_frame.winfo_children():
             widget.destroy()
     
+    def setup_secure_workspace(self):
+        """Setup secure workspace and update UI"""
+        try:
+            if not self.workspace_dir:
+                self.workspace_dir = self.security_manager.create_secure_workspace()
+                self.workspace_label.configure(text=f"Workspace: {self.workspace_dir.name}")
+                logger.info(f"Secure workspace created: {self.workspace_dir}")
+        except Exception as e:
+            logger.error(f"Failed to create secure workspace: {e}")
+            messagebox.showerror("Workspace Error", f"Failed to create secure workspace: {e}")
+    
     def show_welcome(self):
         """Show welcome screen with security warnings"""
         self.clear_content_frame()
         self.current_step = 0
-        self.progress_var.set("Step 1 of 5: Welcome & Security Warning")
+        self.progress_var.set("Step 1 of 6: Welcome & Security Warning")
         
         # Create scrollable frame
         canvas = tk.Canvas(self.content_frame)
@@ -136,8 +200,15 @@ class MidnightClaimerGUI:
         canvas.configure(yscrollcommand=scrollbar.set)
         
         # Title
-        title_label = ttk.Label(scrollable_frame, text="Welcome to MidnightClaimer", style="Title.TLabel")
+        try:
+            from ..config import APP_NAME, APP_VERSION
+            title_text = f"Welcome to {APP_NAME} v{APP_VERSION}"
+        except ImportError:
+            title_text = "Welcome to MidnightClaimer v1.0"
+        
+        title_label = ttk.Label(scrollable_frame, text=title_text, style="Title.TLabel")
         title_label.pack(pady=(0, 20))
+        
         
         # Warning section
         warning_frame = ttk.LabelFrame(scrollable_frame, text="CRITICAL SECURITY WARNING", padding="15")
@@ -186,7 +257,7 @@ class MidnightClaimerGUI:
         
         info_text = """This tool extracts private keys from your Trezor seed phrase to enable claiming Midnight (NIGHT) tokens through software wallets. This bypasses known hardware wallet integration issues with the official Midnight Portal.
 
-The tool supports both Cardano and Bitcoin address claims and uses comprehensive derivation testing to find the correct keys automatically."""
+The tool supports both Cardano and Bitcoin address claims and uses comprehensive derivation testing to find the correct keys automatically. For Cardano, it now automatically converts keys to CLI format for Eternl compatibility."""
         
         info_label = ttk.Label(info_frame, text=info_text, wraplength=700)
         info_label.pack()
@@ -203,7 +274,10 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         """Show claim type selection screen"""
         self.clear_content_frame()
         self.current_step = 1
-        self.progress_var.set("Step 2 of 5: Choose Claim Type")
+        self.progress_var.set("Step 2 of 6: Choose Claim Type")
+        
+        # Setup workspace
+        self.setup_secure_workspace()
         
         title_label = ttk.Label(self.content_frame, text="Choose Your Claim Type", style="Title.TLabel")
         title_label.pack(pady=(0, 30))
@@ -225,7 +299,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         cardano_radio.pack(anchor=tk.W)
         
         cardano_info = ttk.Label(cardano_frame, 
-                                text="• Requires synced Cardano node\n• Uses Eternl wallet for importing\n• Generates .skey files",
+                                text="• Automatic CLI format conversion for Eternl\n• Comprehensive derivation testing\n• Generates both PyCardano and CLI .skey files",
                                 style="Subtitle.TLabel")
         cardano_info.pack(anchor=tk.W, pady=(5, 0))
         
@@ -238,7 +312,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         bitcoin_radio.pack(anchor=tk.W)
         
         bitcoin_info = ttk.Label(bitcoin_frame, 
-                                text="• No blockchain node required\n• Uses Electrum, Sparrow, or other software wallets\n• Generates WIF private keys",
+                                text="• Enhanced address validation\n• Uses Electrum, Sparrow, or other software wallets\n• Generates WIF private keys with verification",
                                 style="Subtitle.TLabel")
         bitcoin_info.pack(anchor=tk.W, pady=(5, 0))
         
@@ -250,7 +324,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         """Show seed phrase and address entry screen"""
         self.clear_content_frame()
         self.current_step = 2
-        self.progress_var.set("Step 3 of 5: Enter Wallet Information")
+        self.progress_var.set("Step 3 of 6: Enter Wallet Information")
         
         title_label = ttk.Label(self.content_frame, text="Enter Your Wallet Information", style="Title.TLabel")
         title_label.pack(pady=(0, 20))
@@ -338,18 +412,18 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         """Show derivation progress screen"""
         self.clear_content_frame()
         self.current_step = 3
-        self.progress_var.set("Step 4 of 5: Finding Your Keys")
+        self.progress_var.set("Step 4 of 6: Finding Your Keys")
         
         title_label = ttk.Label(self.content_frame, text="Finding Your Private Keys", style="Title.TLabel")
         title_label.pack(pady=(0, 30))
         
         info_label = ttk.Label(self.content_frame, 
-                              text="Testing multiple derivation scenarios to find the correct private keys...",
+                              text="Testing multiple derivation scenarios to find the correct private keys...\nThis may take several minutes depending on your configuration.",
                               style="Subtitle.TLabel")
         info_label.pack(pady=(0, 30))
         
         # Progress bar
-        self.derivation_progress = ttk.Progressbar(self.content_frame, mode='determinate', length=400)
+        self.derivation_progress = ttk.Progressbar(self.content_frame, mode='determinate', length=500)
         self.derivation_progress.pack(pady=(0, 20))
         
         # Status label
@@ -370,64 +444,124 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         # Start derivation in background thread
         self.start_derivation()
     
+    def show_extraction_progress(self):
+        """Show key extraction progress screen"""
+        self.clear_content_frame()
+        self.current_step = 4
+        self.progress_var.set("Step 5 of 6: Extracting Keys")
+        
+        title_label = ttk.Label(self.content_frame, text="Extracting Private Keys", style="Title.TLabel")
+        title_label.pack(pady=(0, 30))
+        
+        if self.claim_type == "cardano":
+            info_text = "Generating PyCardano keys and converting to CLI format for Eternl..."
+        else:
+            info_text = "Generating WIF private keys for software wallet import..."
+        
+        info_label = ttk.Label(self.content_frame, text=info_text, style="Subtitle.TLabel")
+        info_label.pack(pady=(0, 30))
+        
+        # Progress bar
+        self.extraction_progress = ttk.Progressbar(self.content_frame, mode='indeterminate', length=500)
+        self.extraction_progress.pack(pady=(0, 20))
+        self.extraction_progress.start(10)
+        
+        # Status label
+        self.extraction_status_label = ttk.Label(self.content_frame, text="Extracting keys...", style="Subtitle.TLabel")
+        self.extraction_status_label.pack()
+        
+        # Disable navigation buttons during processing
+        self.back_button.configure(state="disabled")
+        self.next_button.configure(state="disabled")
+        
+        # Start extraction in background thread
+        self.start_extraction()
+    
     def show_results(self):
         """Show results screen"""
         self.clear_content_frame()
-        self.current_step = 4
-        self.progress_var.set("Step 5 of 5: Results")
+        self.current_step = 5
+        self.progress_var.set("Step 6 of 6: Results")
         
-        if self.derivation_result:
+        if self.key_extraction_result:
             self.show_success_screen()
         else:
             self.show_failure_screen()
     
     def show_success_screen(self):
         """Show success screen with key extraction results"""
-        title_label = ttk.Label(self.content_frame, text="Success! Keys Found!", style="Title.TLabel")
+        title_label = ttk.Label(self.content_frame, text="Success! Keys Generated!", style="Title.TLabel")
         title_label.pack(pady=(0, 20))
         
         # Success info
-        success_frame = ttk.LabelFrame(self.content_frame, text="Derivation Successful", padding="15")
+        success_frame = ttk.LabelFrame(self.content_frame, text="Key Generation Successful", padding="15")
         success_frame.pack(fill=tk.X, pady=(0, 20))
         
         if self.claim_type == "cardano":
             info_text = f"""Payment Path: {self.derivation_result['payment_path']}
 Stake Path: {self.derivation_result.get('stake_path', 'N/A')}
 Address Type: {self.derivation_result['address_type']}
-Scenario: {self.derivation_result['scenario_name']}"""
+Scenario: {self.derivation_result['scenario_name']}
+
+Generated Files:
+• CLI Payment Key: {Path(self.key_extraction_result['cli_payment_file']).name}"""
+            if self.key_extraction_result.get('cli_stake_file'):
+                info_text += f"\n• CLI Stake Key: {Path(self.key_extraction_result['cli_stake_file']).name}"
+            info_text += f"\n• Instructions: Available in workspace"
         else:
             info_text = f"""Derivation Path: {self.derivation_result['derivation_result']['derivation_path']}
 Address Type: {self.derivation_result['address_type']}
 Account: {self.derivation_result['account']}
 Index: {self.derivation_result['address_index']}
-Scenario: {self.derivation_result['scenario_name']}"""
+Scenario: {self.derivation_result['scenario_name']}
+
+Generated Files:
+• WIF Private Key: {Path(self.key_extraction_result['wif_file']).name}
+• Instructions: Available in workspace"""
         
         info_label = ttk.Label(success_frame, text=info_text, style="Subtitle.TLabel")
         info_label.pack(anchor=tk.W)
+        
+        # Workspace info
+        workspace_frame = ttk.LabelFrame(self.content_frame, text="File Location", padding="15")
+        workspace_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        workspace_text = f"All files saved to: {self.workspace_dir}"
+        workspace_label = ttk.Label(workspace_frame, text=workspace_text, style="Subtitle.TLabel")
+        workspace_label.pack(anchor=tk.W)
+        
+        # Open folder button
+        open_button = ttk.Button(workspace_frame, text="Open Folder", 
+                                command=self.open_workspace_folder, style="Small.TButton")
+        open_button.pack(anchor=tk.W, pady=(10, 0))
         
         # Next steps
         steps_frame = ttk.LabelFrame(self.content_frame, text="Next Steps", padding="15")
         steps_frame.pack(fill=tk.X, pady=(0, 20))
         
-        steps_text = """1. Click 'Extract Keys' to generate your private key files
-2. Follow the instructions in the generated instruction file
-3. Import keys to your software wallet
+        if self.claim_type == "cardano":
+            steps_text = """1. Read the instruction file in your workspace folder
+2. Use the CLI format files (*_cli.skey) for Eternl import
+3. Import keys to Eternl wallet
 4. Connect to Midnight Portal and execute claim
 5. IMMEDIATELY delete all private key files after claiming
 6. Transfer claimed tokens to your NEW secure wallet
 7. Restart your computer to clear memory"""
+        else:
+            steps_text = """1. Read the instruction file in your workspace folder
+2. Import the WIF key to your software wallet (Electrum, Sparrow, etc.)
+3. Connect to Midnight Portal and execute claim
+4. IMMEDIATELY delete all private key files after claiming
+5. Transfer claimed tokens to your NEW secure wallet
+6. Restart your computer to clear memory"""
         
         steps_label = ttk.Label(steps_frame, text=steps_text, style="Subtitle.TLabel")
         steps_label.pack(anchor=tk.W)
         
-        # Extract button
-        self.extract_button = ttk.Button(self.content_frame, text="Extract Keys", 
-                                        command=self.extract_keys, style="Big.TButton")
-        self.extract_button.pack(pady=20)
-        
         # Update navigation
         self.back_button.configure(state="disabled")
         self.next_button.configure(text="Finish", state="normal")
+        self.cleanup_button.grid()  # Show cleanup button
     
     def show_failure_screen(self):
         """Show failure screen with troubleshooting information"""
@@ -443,7 +577,8 @@ Scenario: {self.derivation_result['scenario_name']}"""
 • Seed phrase doesn't match your Trezor wallet
 • Address is from a different wallet entirely
 • Passphrase encoding issues
-• Non-standard derivation paths"""
+• Non-standard derivation paths
+• Incorrect stake checksum (Cardano only)"""
         
         error_label = ttk.Label(error_frame, text=error_text, style="Warning.TLabel")
         error_label.pack(anchor=tk.W)
@@ -455,8 +590,9 @@ Scenario: {self.derivation_result['scenario_name']}"""
         steps_text = """1. Double-check your seed phrase against your Trezor
 2. Try with an empty passphrase (many users think they have one when they don't)
 3. Verify the eligible address is correct from the Midnight Portal
-4. Ensure the address is from the same wallet as your seed phrase
-5. Consider using hardware wallet's native export functionality"""
+4. For Cardano: Verify the stake checksum is exactly 64 hex characters
+5. Ensure the address is from the same wallet as your seed phrase
+6. Consider using hardware wallet's native export functionality"""
         
         steps_label = ttk.Label(steps_frame, text=steps_text, style="Subtitle.TLabel")
         steps_label.pack(anchor=tk.W)
@@ -485,7 +621,7 @@ Scenario: {self.derivation_result['scenario_name']}"""
                     )
                 
                 self.derivation_result = result
-                self.progress_queue.put(("COMPLETE", result))
+                self.progress_queue.put(("DERIVATION_COMPLETE", result))
                 
             except Exception as e:
                 logger.error(f"Derivation error: {e}")
@@ -498,6 +634,43 @@ Scenario: {self.derivation_result['scenario_name']}"""
         
         # Start progress monitoring
         self.monitor_progress()
+    
+    def start_extraction(self):
+        """Start the key extraction process in a background thread"""
+        def extraction_worker():
+            try:
+                if self.claim_type == "cardano":
+                    # Extract and convert Cardano keys
+                    result = self.cardano_service.extract_keys(self.derivation_result, self.workspace_dir)
+                    # Create instructions
+                    instructions_file = self.cardano_service.create_instructions_file(result, self.workspace_dir)
+                    result['instructions_file'] = instructions_file
+                else:
+                    # Extract Bitcoin keys
+                    result = self.bitcoin_service.extract_private_key(self.derivation_result, self.workspace_dir)
+                    # Create instructions
+                    instructions_file = self.bitcoin_service.create_instructions_file(result, self.workspace_dir)
+                    result['instructions_file'] = instructions_file
+                
+                # Register files for cleanup
+                for key, value in result.items():
+                    if key.endswith('_file') and value:
+                        self.security_manager.register_temp_file(Path(value))
+                
+                self.key_extraction_result = result
+                self.progress_queue.put(("EXTRACTION_COMPLETE", result))
+                
+            except Exception as e:
+                logger.error(f"Extraction error: {e}")
+                self.progress_queue.put(("ERROR", str(e)))
+        
+        # Start worker thread
+        worker_thread = threading.Thread(target=extraction_worker)
+        worker_thread.daemon = True
+        worker_thread.start()
+        
+        # Start progress monitoring for extraction
+        self.monitor_extraction_progress()
     
     def progress_callback(self, message: str, percentage: int):
         """Callback for progress updates from derivation services"""
@@ -518,15 +691,16 @@ Scenario: {self.derivation_result['scenario_name']}"""
                     self.log_text.configure(state=tk.DISABLED)
                     self.log_text.see(tk.END)
                     
-                elif msg_type == "COMPLETE":
+                elif msg_type == "DERIVATION_COMPLETE":
                     self.derivation_progress['value'] = 100
                     if data:
                         self.status_label.configure(text="Keys found successfully!", foreground="green")
+                        # Proceed to extraction
+                        self.root.after(2000, self.show_extraction_progress)
                     else:
                         self.status_label.configure(text="No matching keys found", foreground="red")
-                    
-                    # Enable next button after brief delay
-                    self.root.after(2000, lambda: self.next_button.configure(state="normal"))
+                        # Enable next button to show failure screen
+                        self.root.after(2000, lambda: self.next_button.configure(state="normal"))
                     return
                     
                 elif msg_type == "ERROR":
@@ -540,43 +714,56 @@ Scenario: {self.derivation_result['scenario_name']}"""
         # Continue monitoring
         self.root.after(100, self.monitor_progress)
     
-    def extract_keys(self):
-        """Extract private keys and create instruction files"""
+    def monitor_extraction_progress(self):
+        """Monitor extraction progress queue and update UI"""
         try:
-            # Create secure workspace
-            workspace = self.security_manager.create_secure_workspace()
-            
-            if self.claim_type == "cardano":
-                key_info = self.cardano_service.extract_keys(self.derivation_result, workspace)
-                instruction_file = self.cardano_service.create_instructions_file(key_info, workspace)
+            while True:
+                msg_type, data = self.progress_queue.get_nowait()
                 
-                # Register files for cleanup
-                self.security_manager.register_temp_file(Path(key_info['payment_key_file']))
-                if key_info['stake_key_file']:
-                    self.security_manager.register_temp_file(Path(key_info['stake_key_file']))
+                if msg_type == "EXTRACTION_COMPLETE":
+                    self.extraction_progress.stop()
+                    self.extraction_status_label.configure(text="Key extraction successful!", foreground="green")
+                    # Enable next button after brief delay
+                    self.root.after(2000, lambda: self.next_button.configure(state="normal"))
+                    return
                     
-            else:
-                key_info = self.bitcoin_service.extract_private_key(self.derivation_result, workspace)
-                instruction_file = self.bitcoin_service.create_instructions_file(key_info, workspace)
-                
-                # Register files for cleanup
-                self.security_manager.register_temp_file(Path(key_info['wif_file']))
+                elif msg_type == "ERROR":
+                    self.extraction_progress.stop()
+                    self.extraction_status_label.configure(text=f"Error: {data}", foreground="red")
+                    self.next_button.configure(state="normal")
+                    return
+                    
+        except queue.Empty:
+            pass
+        
+        # Continue monitoring
+        self.root.after(100, self.monitor_extraction_progress)
+    
+    def open_workspace_folder(self):
+        """Open the workspace folder in file explorer"""
+        try:
+            import subprocess
+            import platform
             
-            self.security_manager.register_temp_file(Path(instruction_file))
-            
-            # Show success message
-            messagebox.showinfo("Keys Extracted Successfully", 
-                              f"Your private keys have been saved to:\n{workspace}\n\n"
-                              f"Please read the instruction file:\n{Path(instruction_file).name}\n\n"
-                              f"CRITICAL: Delete all files immediately after claiming!\n"
-                              f"Restart your computer after claiming to clear memory!")
-            
-            # Update button
-            self.extract_button.configure(text="Keys Extracted", state="disabled")
-            
+            system = platform.system()
+            if system == "Windows":
+                subprocess.run(["explorer", str(self.workspace_dir)])
+            elif system == "Darwin":  # macOS
+                subprocess.run(["open", str(self.workspace_dir)])
+            else:  # Linux
+                subprocess.run(["xdg-open", str(self.workspace_dir)])
         except Exception as e:
-            logger.error(f"Key extraction failed: {e}")
-            messagebox.showerror("Extraction Failed", f"Failed to extract keys: {e}")
+            logger.error(f"Failed to open folder: {e}")
+            messagebox.showerror("Error", f"Failed to open folder: {e}")
+    
+    def manual_cleanup(self):
+        """Manual cleanup button handler"""
+        if self.security_manager.secure_cleanup():
+            self.cleanup_button.grid_remove()
+            messagebox.showinfo("Cleanup Complete", 
+                               "All temporary files have been securely deleted.\n\n"
+                               "IMPORTANT: Restart your computer to clear any remaining "
+                               "traces from memory.")
     
     def validate_input(self, event=None):
         """Validate current input and update UI accordingly"""
@@ -677,8 +864,12 @@ Scenario: {self.derivation_result['scenario_name']}"""
         elif self.current_step == 2:
             self.show_derivation_progress()
         elif self.current_step == 3:
-            self.show_results()
+            # Handled automatically by progress monitoring
+            pass
         elif self.current_step == 4:
+            # Handled automatically by extraction monitoring
+            pass
+        elif self.current_step == 5:
             # Finish or start over
             if self.next_button.cget('text') == "Start Over":
                 self.restart_application()
@@ -689,22 +880,27 @@ Scenario: {self.derivation_result['scenario_name']}"""
         """Restart the application"""
         self.security_manager.secure_cleanup(show_confirmation=False)
         self.derivation_result = None
+        self.key_extraction_result = None
         self.claim_type = None
+        self.workspace_dir = None
+        self.cleanup_button.grid_remove()
         self.show_welcome()
     
     def finish_application(self):
         """Finish the application"""
-        if messagebox.askyesno("Secure Cleanup", 
-                              "Application complete!\n\n"
-                              "Would you like to securely clean up all temporary files now?\n"
-                              "(Recommended immediately after importing to your wallet)"):
-            if self.security_manager.secure_cleanup():
-                messagebox.showinfo("Cleanup Complete", 
-                                   "All temporary files have been securely deleted.\n\n"
-                                   "IMPORTANT: Restart your computer to clear any remaining "
-                                   "traces from memory.")
+        messagebox.showinfo("Application Complete", 
+                           "Key generation completed successfully!\n\n"
+                           "IMPORTANT REMINDERS:\n"
+                           "• Read the instruction file in your workspace\n"
+                           "• Import keys to your software wallet\n"
+                           "• Execute your claim through Midnight Portal\n"
+                           "• DELETE all key files immediately after claiming\n"
+                           "• Transfer tokens to your NEW secure wallet\n"
+                           "• Restart your computer to clear memory\n\n"
+                           "Use the 'Secure Cleanup' button to delete files now.")
         
-        self.root.quit()
+        # Keep application open for manual cleanup
+        self.next_button.configure(state="disabled")
     
     def on_closing(self):
         """Handle application close"""

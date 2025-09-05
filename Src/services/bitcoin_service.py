@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Bitcoin Service Layer for MidnightClaimer GUI
-Extracted from midnight_claim_bitcoin.py for use in GUI application
+Extracted and enhanced from midnight_claim_bitcoin.py for use in GUI application
 """
 
 import os
@@ -13,6 +13,7 @@ from mnemonic import Mnemonic
 from bitcoinlib.keys import HDKey
 import hashlib
 import base58
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,8 @@ class BitcoinService:
     
     def __init__(self):
         self.mnemo = Mnemonic("english")
+        # Use consistent workspace path matching working script
+        self.workspace_base = Path(r"D:\workspace\VisualStudio\Midnight Claim")
     
     def validate_seed_phrase(self, seed_phrase: str) -> bool:
         """Validate mnemonic seed phrase"""
@@ -39,40 +42,66 @@ class BitcoinService:
             return False
     
     def validate_bitcoin_address_format(self, address: str) -> bool:
-        """Validate Bitcoin address format"""
+        """Validate Bitcoin address format with proper validation"""
         try:
             if not address or not address.strip():
                 return False
             
             address = address.strip()
             
-            # Check basic format
+            # Legacy addresses (P2PKH) - start with '1'
             if address.startswith('1'):
-                # Legacy P2PKH - should be 25-34 characters, base58
                 if len(address) < 25 or len(address) > 34:
                     return False
                 try:
-                    base58.b58decode_check(address)
+                    # Validate base58 encoding and checksum
+                    decoded = base58.b58decode_check(address)
+                    # P2PKH should have 21 bytes (1 byte version + 20 bytes hash)
+                    if len(decoded) != 21:
+                        return False
+                    # Version byte should be 0x00 for mainnet P2PKH
+                    if decoded[0] != 0x00:
+                        return False
                     return True
-                except:
+                except Exception:
                     return False
+            
+            # P2SH addresses - start with '3'
             elif address.startswith('3'):
-                # P2SH - should be 25-34 characters, base58
                 if len(address) < 25 or len(address) > 34:
                     return False
                 try:
-                    base58.b58decode_check(address)
+                    # Validate base58 encoding and checksum
+                    decoded = base58.b58decode_check(address)
+                    # P2SH should have 21 bytes (1 byte version + 20 bytes hash)
+                    if len(decoded) != 21:
+                        return False
+                    # Version byte should be 0x05 for mainnet P2SH
+                    if decoded[0] != 0x05:
+                        return False
                     return True
-                except:
+                except Exception:
                     return False
+            
+            # Bech32 addresses (Native SegWit) - start with 'bc1'
             elif address.startswith('bc1'):
-                # Bech32 - should be 39-59 characters
                 if len(address) < 39 or len(address) > 59:
                     return False
-                # Basic bech32 format check
-                if not all(c in 'qpzry9x8gf2tvdw0s3jn54khce6mua7l' for c in address[3:]):
+                try:
+                    # Basic bech32 format validation
+                    # Should only contain valid bech32 characters
+                    bech32_chars = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l'
+                    
+                    # Check if all characters after 'bc1' are valid bech32
+                    data_part = address[3:]  # Remove 'bc1' prefix
+                    if not all(c in bech32_chars for c in data_part):
+                        return False
+                    
+                    # Additional validation could be added here for full bech32 decode
+                    # For now, this basic check should suffice for format validation
+                    return True
+                except Exception:
                     return False
-                return True
             else:
                 return False
                 
@@ -97,13 +126,26 @@ class BitcoinService:
     def get_derivation_path(self, address_type: str, account: int, change: int, index: int) -> str:
         """Get BIP derivation path for different address types"""
         if address_type == 'legacy':
+            # BIP44: m/44'/0'/account'/change/index
             return f"m/44'/0'/{account}'/{change}/{index}"
         elif address_type == 'segwit':
+            # BIP49: m/49'/0'/account'/change/index
             return f"m/49'/0'/{account}'/{change}/{index}"
         elif address_type == 'native_segwit':
+            # BIP84: m/84'/0'/account'/change/index
             return f"m/84'/0'/{account}'/{change}/{index}"
         else:
             raise ValueError(f"Unsupported address type: {address_type}")
+    
+    def _validate_derivation_path(self, path: str) -> bool:
+        """Validate Bitcoin derivation path format"""
+        try:
+            # Should match pattern: m/purpose'/coin'/account'/change/index
+            # Where purpose is 44, 49, or 84 for Bitcoin
+            pattern = r"^m/(44|49|84)'/0'/\d+'/[0-1]/\d+$"
+            return bool(re.match(pattern, path))
+        except:
+            return False
     
     def _validate_derived_key(self, derived_key) -> bool:
         """Validate that a derived key is properly formed"""
@@ -126,15 +168,47 @@ class BitcoinService:
             if not hasattr(derived_key, 'wif') or not derived_key.wif():
                 return False
             
+            # Validate WIF format
+            wif = derived_key.wif()
+            if not self._validate_wif_format(wif):
+                return False
+            
             return True
             
         except Exception as e:
             logger.debug(f"Key validation failed: {e}")
             return False
     
+    def _validate_wif_format(self, wif_key: str) -> bool:
+        """Validate WIF private key format"""
+        try:
+            if not wif_key or not wif_key.strip():
+                return False
+            
+            wif_key = wif_key.strip()
+            
+            # WIF keys should start with specific characters
+            if not (wif_key.startswith('5') or wif_key.startswith('K') or wif_key.startswith('L')):
+                return False
+            
+            # Basic length check
+            if len(wif_key) < 51 or len(wif_key) > 52:
+                return False
+            
+            # Validate base58 encoding
+            try:
+                base58.b58decode_check(wif_key)
+                return True
+            except Exception:
+                return False
+                
+        except Exception as e:
+            logger.debug(f"WIF validation failed: {e}")
+            return False
+    
     def derive_bitcoin_key(self, seed_phrase: str, passphrase: str, account: int, 
                           address_index: int, address_type: str) -> Optional[Dict]:
-        """Derive Bitcoin private key for given parameters"""
+        """Derive Bitcoin private key for given parameters with comprehensive validation"""
         try:
             # Validate inputs first
             if not self.validate_seed_phrase(seed_phrase):
@@ -147,6 +221,10 @@ class BitcoinService:
                 
             if address_index < 0 or address_index > 1000:  # Reasonable limits
                 logger.debug(f"Address index out of range: {address_index}")
+                return None
+            
+            if address_type not in ['legacy', 'segwit', 'native_segwit']:
+                logger.debug(f"Invalid address type: {address_type}")
                 return None
             
             # Create seed from mnemonic
@@ -165,8 +243,11 @@ class BitcoinService:
                 logger.debug("Failed to create valid master key")
                 return None
             
-            # Get derivation path
+            # Get and validate derivation path
             derivation_path = self.get_derivation_path(address_type, account, 0, address_index)
+            if not self._validate_derivation_path(derivation_path):
+                logger.debug(f"Invalid derivation path: {derivation_path}")
+                return None
             
             # Derive key
             derived_key = master_key.subkey_for_path(derivation_path)
@@ -196,6 +277,16 @@ class BitcoinService:
                 logger.debug(f"Generated invalid address: {address}")
                 return None
             
+            # Double-check address type matches expected
+            try:
+                detected_type = self.detect_address_type(address)
+                if detected_type != address_type:
+                    logger.debug(f"Address type mismatch: expected {address_type}, got {detected_type}")
+                    return None
+            except Exception as e:
+                logger.debug(f"Address type verification failed: {e}")
+                return None
+            
             return {
                 'address': address,
                 'private_key_wif': derived_key.wif(),
@@ -218,16 +309,7 @@ class BitcoinService:
     ) -> Optional[Dict]:
         """
         Comprehensive derivation test with progress updates
-        
-        Args:
-            seed_phrase: The mnemonic seed phrase
-            passphrase: The passphrase (can be empty)
-            eligible_address: Target Bitcoin address to match
-            address_type: Bitcoin address type (legacy, segwit, native_segwit)
-            progress_callback: Function to call with progress updates (message, percentage)
-            
-        Returns:
-            Dictionary with derivation details if successful, None otherwise
+        Based on the working midnight_claim_bitcoin.py logic
         """
         if progress_callback:
             progress_callback("Starting comprehensive Bitcoin derivation test...", 0)
@@ -251,12 +333,17 @@ class BitcoinService:
             if detected_type != address_type:
                 logger.warning(f"Address type mismatch: detected {detected_type}, expected {address_type}")
                 address_type = detected_type  # Use detected type
+                if progress_callback:
+                    progress_callback(f"Auto-corrected address type to: {address_type}", 10)
         except Exception as e:
             if progress_callback:
                 progress_callback(f"Address type detection failed: {e}", 100)
             return None
         
-        # Passphrase scenarios to test
+        logger.info(f"Target Bitcoin address: {eligible_address}")
+        logger.info(f"Address type: {address_type}")
+        
+        # Passphrase scenarios to test (matching working script)
         passphrase_scenarios = [
             ("current_passphrase", passphrase),
             ("empty_passphrase", ""),
@@ -272,6 +359,8 @@ class BitcoinService:
         for scenario_name, test_passphrase in passphrase_scenarios:
             if progress_callback:
                 progress_callback(f"Testing {scenario_name}...", int(current_combination / total_combinations * 100))
+            
+            logger.info(f"--- Testing {scenario_name} ---")
             
             # Test different accounts (0-4)
             for account in range(5):
@@ -294,40 +383,82 @@ class BitcoinService:
                             if progress_callback:
                                 progress_callback("Perfect match found!", 100)
                             
-                            return {
-                                'account': account,
-                                'address_index': address_index,
-                                'derivation_result': result,
-                                'scenario_name': scenario_name,
-                                'passphrase_used': test_passphrase,
-                                'address_type': address_type
-                            }
+                            logger.info(f"PERFECT MATCH! Derivation found!")
+                            logger.info(f"  Scenario: {scenario_name}")
+                            logger.info(f"  Account: {account}, Index: {address_index}")
+                            logger.info(f"  Derivation Path: {result['derivation_path']}")
+                            logger.info(f"  Address: {result['address']}")
+                            
+                            return self._create_result(
+                                account, address_index, result, scenario_name, test_passphrase, address_type
+                            )
                         
+                        # Log first few attempts for debugging
+                        if account == 0 and address_index < 3 and scenario_name == "current_passphrase":
+                            logger.info(f"Account {account}, Index {address_index}: {result['address'][:20] if result else 'Failed'}...")
+                            
                     except Exception as e:
                         logger.debug(f"Derivation failed for account {account}, index {address_index}: {e}")
                         continue
         
         if progress_callback:
             progress_callback("No matching derivation found", 100)
+        logger.error("No matching derivation found across all scenarios")
         return None
+    
+    def _create_result(self, account: int, address_index: int, derivation_result: Dict, 
+                      scenario_name: str, passphrase_used: str, address_type: str) -> Dict:
+        """Create successful result object with validation"""
+        
+        # Validate inputs
+        if account < 0 or address_index < 0:
+            raise ValueError("Account and address index must be non-negative")
+        
+        if not derivation_result or 'address' not in derivation_result:
+            raise ValueError("Invalid derivation result")
+        
+        if not self.validate_bitcoin_address_format(derivation_result['address']):
+            raise ValueError(f"Invalid address in result: {derivation_result['address']}")
+        
+        if not self._validate_wif_format(derivation_result['private_key_wif']):
+            raise ValueError(f"Invalid WIF key in result: {derivation_result['private_key_wif']}")
+        
+        logger.info("MATCH FOUND!")
+        logger.info(f"  Derivation Path: {derivation_result['derivation_path']}")
+        logger.info(f"  Address Type: {address_type}")
+        logger.info(f"  Account: {account}, Index: {address_index}")
+        logger.info(f"  Scenario: {scenario_name}")
+        
+        return {
+            'account': account,
+            'address_index': address_index,
+            'derivation_result': derivation_result,
+            'scenario_name': scenario_name,
+            'passphrase_used': passphrase_used,
+            'address_type': address_type
+        }
     
     def extract_private_key(self, derivation_info: Dict, output_dir: Path) -> Dict[str, str]:
         """
-        Extract and save the Bitcoin private key in WIF format
-        
-        Returns:
-            Dictionary with file paths and key information
+        Extract and save the Bitcoin private key in WIF format with comprehensive validation
         """
         try:
+            # Ensure output directory exists with proper permissions
+            output_dir.mkdir(parents=True, exist_ok=True)
+            os.chmod(output_dir, 0o700)
+            
             derivation_result = derivation_info['derivation_result']
             address = derivation_result['address']
             private_key_wif = derivation_result['private_key_wif']
             
-            # Validate WIF key before saving
-            from ..utils.security import validate_bitcoin_wif
-            wif_valid, wif_error = validate_bitcoin_wif(private_key_wif)
-            if not wif_valid:
-                raise ValueError(f"Generated invalid WIF key: {wif_error}")
+            # Validate inputs
+            if not self.validate_bitcoin_address_format(address):
+                raise ValueError(f"Invalid address for key extraction: {address}")
+            
+            if not self._validate_wif_format(private_key_wif):
+                raise ValueError(f"Invalid WIF key for extraction: {private_key_wif}")
+            
+            logger.info("Extracting Bitcoin private key...")
             
             # Create safe filename from address
             safe_addr = address[:12].replace('1', '').replace('3', '').replace('bc1q', 'bc1q')
@@ -335,25 +466,45 @@ class BitcoinService:
             
             # Save WIF private key
             wif_file = output_dir / f"midnight_bitcoin_private_{safe_addr}_{process_id}.wif"
-            with open(wif_file, 'w') as f:
-                f.write(private_key_wif)
             
-            # Set restrictive permissions on the file
-            os.chmod(wif_file, 0o600)
+            try:
+                with open(wif_file, 'w') as f:
+                    f.write(private_key_wif)
+                
+                # Set restrictive permissions on the file
+                os.chmod(wif_file, 0o600)
+                logger.info(f"WIF key saved: {wif_file.name}")
+                
+            except Exception as e:
+                logger.error(f"Failed to save WIF file: {e}")
+                raise ValueError(f"Failed to save WIF file: {e}")
             
-            return {
+            # Verify file was written correctly
+            try:
+                with open(wif_file, 'r') as f:
+                    saved_wif = f.read().strip()
+                if saved_wif != private_key_wif:
+                    raise ValueError("WIF file verification failed - content mismatch")
+            except Exception as e:
+                logger.error(f"WIF file verification failed: {e}")
+                raise ValueError(f"WIF file verification failed: {e}")
+            
+            result = {
                 'wif_file': str(wif_file),
                 'address': address,
                 'private_key_wif': private_key_wif,
                 'derivation_info': derivation_info
             }
             
+            logger.info("Bitcoin private key extraction completed successfully")
+            return result
+            
         except Exception as e:
             logger.error(f"Private key extraction error: {e}")
             raise
     
     def create_instructions_file(self, key_info: Dict, output_dir: Path) -> str:
-        """Create instruction file for user"""
+        """Create comprehensive instruction file for user"""
         address = key_info['address']
         safe_addr = address[:12].replace('1', '').replace('3', '').replace('bc1q', 'bc1q')
         process_id = os.getpid()
@@ -369,25 +520,27 @@ class BitcoinService:
             f.write(f"Derivation Path: {key_info['derivation_info']['derivation_result']['derivation_path']}\n")
             f.write(f"Address Type: {key_info['derivation_info']['address_type']}\n")
             f.write(f"Account: {key_info['derivation_info']['account']}\n")
-            f.write(f"Address Index: {key_info['derivation_info']['address_index']}\n\n")
+            f.write(f"Address Index: {key_info['derivation_info']['address_index']}\n")
+            f.write(f"Scenario Used: {key_info['derivation_info']['scenario_name']}\n\n")
             
-            f.write("PRIVATE KEY FILE:\n")
-            f.write(f"WIF Format: {Path(key_info['wif_file']).name}\n\n")
+            f.write("GENERATED FILES:\n")
+            f.write("=" * 30 + "\n")
+            f.write(f"WIF Private Key: {Path(key_info['wif_file']).name}\n\n")
             
             f.write("SOFTWARE WALLET IMPORT INSTRUCTIONS:\n")
             f.write("=" * 50 + "\n")
             f.write("OPTION 1: Electrum Wallet (Recommended)\n")
             f.write("1. Download Electrum from electrum.org\n")
-            f.write("2. File → New/Restore\n")
+            f.write("2. File -> New/Restore\n")
             f.write("3. Choose 'Import Bitcoin addresses or private keys'\n")
             f.write(f"4. Paste WIF key from: {Path(key_info['wif_file']).name}\n")
-            f.write("5. Next → Create\n")
+            f.write("5. Next -> Create\n")
             f.write("6. Connect to Midnight Portal\n")
             f.write("7. Execute claim\n\n")
             
             f.write("OPTION 2: Sparrow Wallet\n")
             f.write("1. Download Sparrow from sparrowwallet.com\n")
-            f.write("2. File → New Wallet\n")
+            f.write("2. File -> New Wallet\n")
             f.write("3. Choose 'Imported'\n")
             
             address_type = key_info['derivation_info']['address_type']
@@ -400,6 +553,24 @@ class BitcoinService:
             
             f.write(f"5. Paste WIF key from: {Path(key_info['wif_file']).name}\n")
             f.write("6. Create Wallet\n\n")
+            
+            f.write("OPTION 3: Bitcoin Core (Advanced)\n")
+            f.write("1. Ensure Bitcoin Core is synced\n")
+            f.write("2. Open Bitcoin Core console (Help -> Debug Window -> Console)\n")
+            f.write("3. Run: importprivkey \"YOUR_WIF_KEY\" \"midnight_claim\"\n")
+            f.write("4. Wait for rescan to complete\n\n")
+            
+            f.write("TROUBLESHOOTING:\n")
+            f.write("=" * 30 + "\n")
+            f.write("If wallet won't import WIF key:\n")
+            f.write("- Verify the WIF format is correct (should start with 5, K, or L)\n")
+            f.write("- Try a different software wallet\n")
+            f.write("- Check that the wallet supports your address type\n")
+            f.write("- Ensure you're using mainnet (not testnet) wallet\n\n")
+            
+            f.write("If Midnight Portal doesn't recognize address:\n")
+            f.write("- Verify your derived address matches the eligible one exactly\n")
+            f.write("- Contact Midnight support if address eligibility is unclear\n\n")
             
             f.write("SECURITY REQUIREMENTS - IMMEDIATELY AFTER CLAIMING:\n")
             f.write("=" * 50 + "\n")
@@ -415,8 +586,11 @@ class BitcoinService:
             f.write("- Your OLD wallet seed is now compromised\n")
             f.write("- Never use OLD wallet addresses for receiving anything\n")
             f.write("- All future transactions should use your NEW secure wallet\n")
+            f.write("- The WIF private key gives full control over this Bitcoin address\n")
+            f.write("- Only use this for the Midnight claim, then delete immediately\n")
         
         # Set restrictive permissions on instructions file
         os.chmod(instructions_file, 0o600)
         
+        logger.info(f"Instructions saved: {instructions_file.name}")
         return str(instructions_file)
