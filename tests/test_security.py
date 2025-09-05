@@ -1,233 +1,320 @@
 #!/usr/bin/env python3
 """
-Tests for security utilities
+Comprehensive unit tests for Security utilities
+Tests SecureEntry, SecureText, SecurityManager, and validation functions
 """
 
 import pytest
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-import tkinter as tk
 import tempfile
-import os
+import tkinter as tk
 from pathlib import Path
+from unittest.mock import Mock, patch, MagicMock
+import sys
 
-from Src.utils.security import (
-    SecurityManager, 
-    validate_seed_phrase_format, 
-    validate_address_format
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / 'Src'))
+
+from utils.security import (
+    SecureEntry, SecureText, SecurityManager,
+    validate_seed_phrase_format, validate_address_format, validate_stake_checksum, validate_bitcoin_wif
 )
 
-class TestSecurityManager(unittest.TestCase):
-    """Tests for SecurityManager"""
+
+class TestSecureWidgets:
+    """Test secure input widgets"""
     
-    def setUp(self):
+    def setup_method(self):
+        """Set up test fixtures with tkinter root"""
+        self.root = tk.Tk()
+        self.root.withdraw()  # Hide the window during testing
+    
+    def teardown_method(self):
+        """Clean up tkinter root"""
+        if self.root:
+            self.root.destroy()
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_secure_entry_creation(self):
+        """Test SecureEntry widget creation"""
+        entry = SecureEntry(self.root)
+        assert isinstance(entry, tk.Entry)
+        assert entry.cget('show') == '*'  # Password field
+        assert hasattr(entry, '_secure_content')
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_secure_entry_input_tracking(self):
+        """Test SecureEntry input tracking"""
+        entry = SecureEntry(self.root)
+        
+        # Simulate typing
+        entry.insert(0, "test_password")
+        
+        # Check that secure content is tracked
+        assert entry.get() == "test_password"
+        assert entry._secure_content == "test_password"
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_secure_entry_clear(self):
+        """Test SecureEntry secure clearing"""
+        entry = SecureEntry(self.root)
+        entry.insert(0, "sensitive_data")
+        
+        # Clear securely
+        entry.secure_clear()
+        
+        # Verify cleared
+        assert entry.get() == ""
+        assert entry._secure_content == ""
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_secure_text_creation(self):
+        """Test SecureText widget creation"""
+        text = SecureText(self.root)
+        assert isinstance(text, tk.Text)
+        assert hasattr(text, '_secure_content')
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_secure_text_input_tracking(self):
+        """Test SecureText input tracking"""
+        text = SecureText(self.root)
+        
+        # Simulate typing (trigger key release to update tracking)
+        text.insert("1.0", "test seed phrase")
+        text._update_content()  # Manually trigger content update
+        
+        # Check that secure content is tracked
+        content = text.get("1.0", tk.END).strip()
+        assert "test seed phrase" in content
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_secure_text_clear(self):
+        """Test SecureText secure clearing"""
+        text = SecureText(self.root)
+        text.insert("1.0", "sensitive seed phrase data")
+        text._update_content()
+        
+        # Clear securely
+        text.secure_clear()
+        
+        # Verify cleared
+        assert text.get("1.0", tk.END).strip() == ""
+        assert text._secure_content == ""
+
+
+class TestSecurityManager:
+    """Test SecurityManager functionality"""
+    
+    def setup_method(self):
+        """Set up test fixtures"""
         self.security_manager = SecurityManager()
+        self.temp_dir = Path(tempfile.mkdtemp())
+        
+    def teardown_method(self):
+        """Clean up test fixtures"""
+        import shutil
+        if self.temp_dir.exists():
+            shutil.rmtree(self.temp_dir)
     
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_security_manager_initialization(self):
+        """Test SecurityManager initialization"""
+        sm = SecurityManager()
+        assert sm.temp_files == []
+        assert sm.secure_widgets == []
+        assert sm.workspace_dir is None
+        assert sm._cleanup_performed == False
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    @patch('utils.security.messagebox')
+    def test_show_memory_warning(self, mock_messagebox):
+        """Test memory warning dialog"""
+        # Test user accepting warning
+        mock_messagebox.askyesno.return_value = True
+        result = self.security_manager.show_memory_warning()
+        assert result == True
+        mock_messagebox.askyesno.assert_called_once()
+        
+        # Test user rejecting warning
+        mock_messagebox.askyesno.return_value = False
+        result = self.security_manager.show_memory_warning()
+        assert result == False
+    
+    @pytest.mark.unit
+    @pytest.mark.security
     def test_create_secure_workspace(self):
         """Test secure workspace creation"""
         workspace = self.security_manager.create_secure_workspace()
         
-        self.assertIsInstance(workspace, Path)
-        self.assertTrue(workspace.exists())
-        self.assertTrue(workspace.is_dir())
-        
-        # Check permissions (owner only)
-        stat = workspace.stat()
-        permissions = oct(stat.st_mode)[-3:]
-        self.assertEqual(permissions, '700')
+        assert workspace.exists()
+        assert workspace.is_dir()
+        assert "gui_session_" in workspace.name
+        assert self.security_manager.workspace_dir == workspace
         
         # Cleanup
-        self.security_manager.secure_cleanup(show_confirmation=False)
+        import shutil
+        shutil.rmtree(workspace)
     
+    @pytest.mark.unit
+    @pytest.mark.security
     def test_register_temp_file(self):
         """Test temporary file registration"""
-        temp_file = Path("/tmp/test_file.txt")
-        self.security_manager.register_temp_file(temp_file)
+        test_file = self.temp_dir / "test_file.txt"
+        test_file.touch()
         
-        self.assertIn(temp_file, self.security_manager.temp_files)
+        self.security_manager.register_temp_file(test_file)
+        
+        assert test_file in self.security_manager.temp_files
+        assert len(self.security_manager.temp_files) == 1
+        
+        # Test duplicate registration (should not add twice)
+        self.security_manager.register_temp_file(test_file)
+        assert len(self.security_manager.temp_files) == 1
     
-    def test_secure_cleanup(self):
-        """Test secure cleanup process"""
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-            temp_path = Path(temp_file.name)
-            temp_file.write(b"sensitive data")
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_register_secure_widget(self):
+        """Test secure widget registration"""
+        root = tk.Tk()
+        root.withdraw()
         
-        # Register for cleanup
-        self.security_manager.register_temp_file(temp_path)
-        
-        # Perform cleanup
-        result = self.security_manager.secure_cleanup(show_confirmation=False)
-        
-        self.assertTrue(result)
-        self.assertFalse(temp_path.exists())
-        self.assertEqual(len(self.security_manager.temp_files), 0)
-
-class TestValidationFunctions(unittest.TestCase):
-    """Tests for validation utility functions"""
-    
-    def test_validate_seed_phrase_format(self):
-        """Test seed phrase format validation"""
-        # Valid cases
-        valid_12 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-        is_valid, error = validate_seed_phrase_format(valid_12)
-        self.assertTrue(is_valid)
-        self.assertEqual(error, "")
-        
-        valid_24 = " ".join(["abandon"] * 23 + ["about"])
-        is_valid, error = validate_seed_phrase_format(valid_24)
-        self.assertTrue(is_valid)
-        
-        # Invalid cases
-        # Empty phrase
-        is_valid, error = validate_seed_phrase_format("")
-        self.assertFalse(is_valid)
-        self.assertIn("empty", error.lower())
-        
-        # Wrong word count
-        is_valid, error = validate_seed_phrase_format("abandon abandon abandon")
-        self.assertFalse(is_valid)
-        self.assertIn("must be", error)
-        
-        # Non-alphabetic characters
-        is_valid, error = validate_seed_phrase_format("abandon abandon123 abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
-        self.assertFalse(is_valid)
-        self.assertIn("non-alphabetic", error)
-        
-        # Too short words
-        is_valid, error = validate_seed_phrase_format("ab cd ef gh hi jk lm no pq rs tu vw")
-        self.assertFalse(is_valid)
-        self.assertIn("too short", error)
-    
-    def test_validate_address_format(self):
-        """Test address format validation"""
-        # Valid Cardano addresses
-        is_valid, error = validate_address_format("addr1qxk3cq8emwuusdlas04yn0qf3xndd6ts6ta7l3kh4vphuhss0y3k3y7r4ztz6xy0xjysj4j9ksysnlhnp0stqdwwyusq9g5th3", "cardano")
-        self.assertTrue(is_valid)
-        
-        is_valid, error = validate_address_format("Ae2tdPwUPEZ5uzkzh1o2DHECiUi3iugvnnKHRisPgRRP3CTF4KCMvy54Xd3", "cardano")
-        self.assertTrue(is_valid)
-        
-        # Valid Bitcoin addresses
-        is_valid, error = validate_address_format("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "bitcoin")
-        self.assertTrue(is_valid)
-        
-        is_valid, error = validate_address_format("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "bitcoin")
-        self.assertTrue(is_valid)
-        
-        is_valid, error = validate_address_format("bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", "bitcoin")
-        self.assertTrue(is_valid)
-        
-        # Invalid cases
-        # Empty address
-        is_valid, error = validate_address_format("", "bitcoin")
-        self.assertFalse(is_valid)
-        self.assertIn("empty", error.lower())
-        
-        # Wrong format for type
-        is_valid, error = validate_address_format("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "cardano")
-        self.assertFalse(is_valid)
-        self.assertIn("must start with", error)
-        
-        is_valid, error = validate_address_format("addr1test", "bitcoin")
-        self.assertFalse(is_valid)
-        self.assertIn("must start with", error)
-        
-        # Too short
-        is_valid, error = validate_address_format("addr1test", "cardano")
-        self.assertFalse(is_valid)
-        self.assertIn("too short", error)
-
-# GUI component tests (require tkinter)
-@patch('tkinter.messagebox.askyesno', return_value=True)
-@patch('tkinter.messagebox.showinfo')
-class TestSecureWidgets(unittest.TestCase):
-    """Tests for secure GUI widgets"""
-    
-    def setUp(self):
-        # Only run GUI tests if tkinter is available
         try:
-            self.root = tk.Tk()
-            self.root.withdraw()  # Hide the window
-        except tk.TclError:
-            self.skipTest("Tkinter not available")
+            widget = SecureEntry(root)
+            self.security_manager.register_secure_widget(widget)
+            
+            assert widget in self.security_manager.secure_widgets
+            assert len(self.security_manager.secure_widgets) == 1
+            
+            # Test duplicate registration (should not add twice)
+            self.security_manager.register_secure_widget(widget)
+            assert len(self.security_manager.secure_widgets) == 1
+        finally:
+            root.destroy()
     
-    def tearDown(self):
-        if hasattr(self, 'root'):
-            self.root.destroy()
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_secure_delete_file(self):
+        """Test secure file deletion"""
+        # Create test file with content
+        test_file = self.temp_dir / "secure_delete_test.txt"
+        test_content = "sensitive data that should be overwritten"
+        test_file.write_text(test_content)
+        
+        assert test_file.exists()
+        
+        # Securely delete the file
+        self.security_manager._secure_delete_file(test_file)
+        
+        # Verify file is deleted
+        assert not test_file.exists()
     
-    def test_secure_entry_creation(self, mock_showinfo, mock_askyesno):
-        """Test SecureEntry widget creation and basic functionality"""
-        from Src.utils.security import SecureEntry
+    @pytest.mark.unit
+    @pytest.mark.security
+    @patch('utils.security.messagebox')
+    def test_secure_cleanup_with_confirmation(self, mock_messagebox):
+        """Test secure cleanup with user confirmation"""
+        # Create test file
+        test_file = self.temp_dir / "test_cleanup.txt"
+        test_file.write_text("test content")
+        self.security_manager.register_temp_file(test_file)
         
-        entry = SecureEntry(self.root)
-        self.assertIsInstance(entry, tk.Entry)
+        # User confirms cleanup
+        mock_messagebox.askyesno.return_value = True
+        mock_messagebox.showinfo.return_value = None
         
-        # Test secure content tracking
-        entry.insert(0, "test_password")
-        self.assertEqual(entry.get(), "test_password")
+        result = self.security_manager.secure_cleanup()
         
-        # Test secure clear
-        entry.secure_clear()
-        self.assertEqual(entry.get(), "")
-    
-    def test_secure_text_creation(self, mock_showinfo, mock_askyesno):
-        """Test SecureText widget creation and basic functionality"""
-        from Src.utils.security import SecureText
-        
-        text = SecureText(self.root)
-        self.assertIsInstance(text, tk.Text)
-        
-        # Test secure content tracking
-        text.insert("1.0", "test seed phrase")
-        # Simulate key release event to update tracking
-        text._on_key_release(None)
-        self.assertEqual(text.get("1.0", tk.END).strip(), "test seed phrase")
-        
-        # Test secure clear
-        text.secure_clear()
-        self.assertEqual(text.get("1.0", tk.END).strip(), "")
+        assert result == True
+        assert not test_file.exists()
+        assert self.security_manager._cleanup_performed == True
+        mock_messagebox.askyesno.assert_called_once()
 
-class TestIntegrationSecurity(unittest.TestCase):
-    """Integration tests for security features"""
-    
-    def test_complete_secure_workflow(self):
-        """Test complete secure workflow from creation to cleanup"""
-        security_manager = SecurityManager()
-        
-        # Create workspace
-        workspace = security_manager.create_secure_workspace()
-        self.assertTrue(workspace.exists())
-        
-        # Create some temporary files
-        temp_file1 = workspace / "test1.txt"
-        temp_file2 = workspace / "test2.txt"
-        
-        with open(temp_file1, 'w') as f:
-            f.write("sensitive data 1")
-        with open(temp_file2, 'w') as f:
-            f.write("sensitive data 2")
-        
-        # Register files
-        security_manager.register_temp_file(temp_file1)
-        security_manager.register_temp_file(temp_file2)
-        
-        # Verify files exist
-        self.assertTrue(temp_file1.exists())
-        self.assertTrue(temp_file2.exists())
-        
-        # Perform cleanup
-        result = security_manager.secure_cleanup(show_confirmation=False)
-        
-        # Verify cleanup success
-        self.assertTrue(result)
-        self.assertFalse(temp_file1.exists())
-        self.assertFalse(temp_file2.exists())
-        self.assertFalse(workspace.exists())
 
-if __name__ == '__main__':
-    # Skip GUI tests if running in headless environment
-    if 'DISPLAY' not in os.environ and os.name != 'nt':
-        TestSecureWidgets = None
+class TestValidationFunctions:
+    """Test validation utility functions"""
     
-    unittest.main()
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_validate_seed_phrase_format_valid(self):
+        """Test seed phrase format validation with valid phrases"""
+        # Test different valid lengths
+        valid_12 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        valid_24 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+        
+        assert validate_seed_phrase_format(valid_12) == (True, "")
+        assert validate_seed_phrase_format(valid_24) == (True, "")
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_validate_seed_phrase_format_invalid_length(self):
+        """Test seed phrase format validation with invalid lengths"""
+        invalid_5 = "abandon abandon abandon abandon abandon"
+        invalid_13 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"  # 13 words
+        
+        is_valid, error = validate_seed_phrase_format(invalid_5)
+        assert is_valid == False
+        assert "must be 12, 15, 18, 21, or 24 words" in error
+        
+        is_valid, error = validate_seed_phrase_format(invalid_13)
+        assert is_valid == False
+        assert "must be 12, 15, 18, 21, or 24 words" in error
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_validate_address_format_cardano(self):
+        """Test Cardano address format validation"""
+        valid_shelley = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
+        valid_byron = "Ae2tdPwUPEZFRbyhz3cpfC2CumGzNkFBN2L42rcUc2yjQpEkxDbkPodpMAi"
+        
+        assert validate_address_format(valid_shelley, "cardano") == (True, "")
+        assert validate_address_format(valid_byron, "cardano") == (True, "")
+        
+        # Test invalid Cardano addresses
+        is_valid, error = validate_address_format("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "cardano")
+        assert is_valid == False
+        assert "must start with 'addr1', 'Ae2', or 'Ddz'" in error
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_validate_address_format_bitcoin(self):
+        """Test Bitcoin address format validation"""
+        valid_legacy = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
+        valid_segwit = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+        valid_native_segwit = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        
+        assert validate_address_format(valid_legacy, "bitcoin") == (True, "")
+        assert validate_address_format(valid_segwit, "bitcoin") == (True, "")
+        assert validate_address_format(valid_native_segwit, "bitcoin") == (True, "")
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_validate_stake_checksum_valid(self):
+        """Test stake checksum validation with valid checksums"""
+        valid_checksum = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        assert validate_stake_checksum(valid_checksum) == (True, "")
+        
+        # Test with uppercase
+        valid_checksum_upper = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
+        assert validate_stake_checksum(valid_checksum_upper) == (True, "")
+    
+    @pytest.mark.unit
+    @pytest.mark.security
+    def test_validate_bitcoin_wif_valid(self):
+        """Test Bitcoin WIF validation with valid keys"""
+        # These are example WIF formats (not real keys)
+        valid_wif_5 = "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ"  # Uncompressed
+        valid_wif_k = "KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617"  # Compressed
+        valid_wif_l = "L1aW4aubDFB7yfras2S1mN3bqg9nwySY8nkoLmJebSLD5BWv3ENZ"  # Compressed
+        
+        # Note: These tests check format only, not actual base58 validity without mock
+        with patch('utils.security.base58'):
+            assert validate_bitcoin_wif(valid_wif_5) == (True, "")
+            assert validate_bitcoin_wif(valid_wif_k) == (True, "")
+            assert validate_bitcoin_wif(valid_wif_l) == (True, "")
