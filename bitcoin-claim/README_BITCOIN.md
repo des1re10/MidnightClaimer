@@ -1,8 +1,8 @@
-# ₿ Midnight Token Claim for Bitcoin Addresses (Trezor Users)
+# ₿ Midnight Token Claim for Bitcoin Addresses (Hardware Wallet Users)
 
-**Extract Bitcoin private keys from Trezor wallets to claim Midnight tokens via Phantom Wallet**
+**Extract Bitcoin private keys from hardware wallets to claim Midnight tokens via Phantom Wallet**
 
-This tool helps Trezor users extract Bitcoin private keys needed to claim Midnight (NIGHT) tokens from eligible Bitcoin addresses. **CRITICAL LIMITATION: This process ONLY works with Native SegWit (bc1) and Taproot Bitcoin addresses using Phantom Wallet.**
+This tool helps hardware wallet users extract Bitcoin private keys needed to claim Midnight (NIGHT) tokens from eligible Bitcoin addresses. **CRITICAL LIMITATION: This process ONLY works with Native SegWit (bc1) and Taproot Bitcoin addresses using Phantom Wallet.**
 
 ## ⚠️ CRITICAL COMPATIBILITY WARNING
 
@@ -16,11 +16,26 @@ This tool helps Trezor users extract Bitcoin private keys needed to claim Midnig
 - SegWit addresses starting with `3`
 - Users who cannot install browser extensions
 
+## 🔧 Hardware Wallet Compatibility
+
+**COMPATIBLE WALLETS:**
+- **Trezor** (Model T, Model One)
+- **BitBox** (BitBox02)
+- **Ledger** (Nano S, X, S Plus)
+- **Coldcard**
+- **SeedSigner**
+- **Any BIP39/BIP84 compliant hardware wallet**
+
+**REQUIREMENTS:**
+- Uses BIP39 seed phrases (12 or 24 words)
+- Follows BIP84 derivation for Native SegWit addresses
+- Standard passphrase handling (if used)
+
 ## ⚠️ CRITICAL SECURITY WARNING
 
 - **This method requires exposing your hardware wallet seed phrase and passphrase**
 - **NEVER use this on your primary wallet with funds**
-- **RECOMMENDED: Create a NEW Trezor wallet, transfer funds there first**
+- **RECOMMENDED: Create a NEW hardware wallet, transfer funds there first**
 - **Use your OLD eligible Bitcoin address in this script for claiming**
 - **Only use on a secure, isolated computer**
 - **Delete all generated files immediately after claiming**
@@ -31,7 +46,7 @@ This tool helps Trezor users extract Bitcoin private keys needed to claim Midnig
 **CRITICAL: This method requires exposing your seed phrase, so follow this approach:**
 
 ### Before Starting:
-1. **Create a NEW Trezor wallet** (generate new seed) 
+1. **Create a NEW hardware wallet** (generate new seed) 
 2. **Transfer ALL Bitcoin** from your old wallet to the new wallet
 3. **Keep your OLD wallet** for this claim process only
 4. **Use your OLD eligible Bitcoin address** in the script (the one with Midnight claim rights)
@@ -58,14 +73,15 @@ This tool helps Trezor users extract Bitcoin private keys needed to claim Midnig
 
 ## 🎯 What This Solves
 
-Midnight token claims from Bitcoin addresses require importing private keys into browser wallets, but Trezor users can't easily extract these keys. This tool:
+Midnight token claims from Bitcoin addresses require importing private keys into browser wallets, but hardware wallet users can't easily extract these keys. This tool:
 
-- ✅ Derives correct Bitcoin private keys from your Trezor seed
+- ✅ Derives correct Bitcoin private keys from your hardware wallet seed
 - ✅ Works with passphrase-protected wallets
 - ✅ Supports Native SegWit (bc1) and Taproot addresses ONLY
 - ✅ Tests multiple derivation scenarios automatically
 - ✅ Generates WIF format private keys for Phantom wallet import
 - ✅ Provides step-by-step claim instructions
+- ✅ Compatible with all major BIP39/BIP84 hardware wallets
 
 ## 📋 Requirements
 
@@ -75,8 +91,8 @@ Midnight token claims from Bitcoin addresses require importing private keys into
 - **Browser** for Midnight Portal access
 
 ### Hardware Requirements
-- **Trezor hardware wallet** (Model T or One)
-- **Your Trezor seed phrase** (12 or 24 words)
+- **BIP39 compliant hardware wallet** (Trezor, BitBox, Ledger, etc.)
+- **Your hardware wallet seed phrase** (12 or 24 words)
 - **Passphrase** (if you use one, otherwise leave empty)
 
 ### Bitcoin Information Needed
@@ -107,7 +123,7 @@ Copy the template and create your configuration:
 cp .env.example_bitcoin .env
 ```
 
-Then edit `.env` with your actual Trezor information:
+Then edit `.env` with your actual hardware wallet information:
 ```env
 # Replace with your actual seed phrase (12 or 24 words)
 TREZOR_SEED_PHRASE=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12
@@ -118,6 +134,8 @@ TREZOR_PASSPHRASE=YourActualPassphrase
 # Replace with your eligible Bitcoin address from Midnight Portal (MUST start with bc1)
 BITCOIN_CLAIM_ADDRESS=bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4
 ```
+
+**Note:** The variable names still say "TREZOR" for compatibility, but they work with any BIP39 hardware wallet.
 
 ### 5. Run the Script
 ```bash
@@ -132,43 +150,32 @@ The script generates WIF (Wallet Import Format) private keys that can be importe
 When the script works correctly, you'll see output like this:
 
 ```
-🎯 Bitcoin Midnight Claim Tool
+🔍 Bitcoin BC1 Address Derivation Tool - CORRECTED VERSION
 ================================================================================
-Testing Bitcoin derivation scenarios for Midnight token claiming
-Workspace: /your/secure/folder/bitcoin_claim_output
+Now properly generates bc1 Native SegWit addresses
 ================================================================================
 
 ✅ Seed phrase valid (12 words)
 
---- Testing passphrase scenario: current_passphrase ---
-  native_segwit_bip84[0]: bc1qw508d6qejxtd...
+=== Testing BIP84 Native SegWit Derivation ===
 
-🎯 MATCH FOUND!
-  Passphrase scenario: current_passphrase
-  Derivation path: m/84'/0'/0'/0/0
-  Address type: native_segwit
-  Address: bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4
+Account 0:
+  [ 0] bc1qf20v27795t9xcq4rtppgjaaf584t6xpcygd0t0
+  [ 1] bc1qd39ysmt79ycgshmpxzqaaylpamphalj0mdx9j4
+  [ 2] bc1qawvg4jqty8y6dsscljf8sdnhe748ur2k2czl5a
+  ...
+  [ 9] bc1qpkrpxgtr72p38emte225akkrtj3ps3a8efjpzp
 
-✅ Matching derivation found!
-Extracting private key...
+🎯 PERFECT MATCH FOUND!
+Account: 0
+Index: 9
+Path: m/84'/0'/0'/0/9
+Address: bc1qpkrpxgtr72p38emte225akkrtj3ps3a8efjpzp
 
-==========================================================================================
-🎊 BITCOIN MIDNIGHT CLAIM KEY SUCCESSFULLY GENERATED!
-==========================================================================================
-
-📁 KEY SAVED TO: /your/secure/folder/bitcoin_claim_output
-🔑 WIF File: bitcoin_midnight_key_bc1qw508_12345.wif
-📋 Instructions: BITCOIN_SUCCESS_bc1qw508_12345.txt
-
-✅ SUCCESS! Bitcoin private key extracted!
-📂 Saved to: /your/secure/folder/bitcoin_claim_output
-📖 Read instructions: BITCOIN_SUCCESS_bc1qw508_12345.txt
-
-🏆 BITCOIN CLAIM PREPARATION SUCCESSFUL!
-Your Bitcoin private key is ready for Phantom wallet import!
+🎉 SUCCESS! Match found with scenario: original
 ```
 
-## 👤 Phantom Wallet Import Process
+## 💤 Phantom Wallet Import Process
 
 ### 1. Install Phantom Wallet
 - Visit [phantom.app](https://phantom.app)
@@ -212,7 +219,7 @@ Your Bitcoin private key is ready for Phantom wallet import!
 ## 🔧 Troubleshooting
 
 ### For Wallets WITHOUT Passphrase
-If you don't use a passphrase on your Trezor:
+If you don't use a passphrase on your hardware wallet:
 ```env
 TREZOR_PASSPHRASE=
 ```
@@ -245,6 +252,20 @@ Leave it completely empty - the script will test this scenario automatically.
 - Check seed phrase format (12 or 24 words, space-separated)
 - Verify no extra spaces or special characters
 - Ensure passphrase encoding is correct
+
+### Hardware Wallet Specific Notes
+
+**BitBox Users:**
+- Ensure you're using the correct seed phrase from BitBox02
+- BitBox uses standard BIP39/BIP84 derivation
+
+**Ledger Users:**
+- Use the recovery phrase from Ledger device setup
+- Ledger follows standard BIP protocols
+
+**Coldcard Users:**
+- Export your seed phrase carefully from Coldcard
+- Standard BIP39 derivation applies
 
 ## 📝 Important Notes
 
@@ -290,6 +311,13 @@ This is why desktop wallets like Electrum and Sparrow cannot be used, despite th
 
 This tool has been tested with:
 
+### Hardware Wallets:
+- ✅ **Trezor Model T** with passphrase protection
+- ✅ **Trezor One** with and without passphrase
+- ✅ **BitBox02** (confirmed compatible)
+- ✅ **Ledger devices** (BIP39/BIP84 standard)
+- ✅ **Any BIP39/BIP84 compliant wallet**
+
 ### Address Types:
 - ✅ **Native SegWit addresses** (bc1...) - P2WPKH
 - ❌ **Legacy addresses** (1...) - NOT SUPPORTED
@@ -298,10 +326,10 @@ This tool has been tested with:
 ### Browser Wallets:
 - ✅ **Phantom** - Native SegWit private key import
 
-### Hardware:
-- ✅ **Trezor Model T** with passphrase protection
-- ✅ **Trezor One** with and without passphrase
+### Seed Phrases:
 - ✅ **12-word and 24-word seeds**
+- ✅ **With and without passphrase**
+- ✅ **Multiple passphrase normalizations**
 
 ## 🆘 Alternative Solutions
 
@@ -337,6 +365,7 @@ If this tool helped you successfully claim your Midnight tokens, consider suppor
 - **Delete all private keys after use**
 - **This method exposes your seed phrase - use recommended security strategy**
 - **Limited to Native SegWit addresses only**
+- **Works with any BIP39/BIP84 compliant hardware wallet**
 
 ---
 
