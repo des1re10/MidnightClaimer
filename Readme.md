@@ -1,492 +1,212 @@
-# 🌙 Midnight Token Claim for Trezor Users
+# 🌙 Midnight Token Claim Tools for Trezor Users
 
-**Extract private keys from Trezor wallets to claim Midnight tokens via Eternl**
+**Extract private keys from Trezor wallets to claim Midnight (NIGHT) tokens**
 
-This tool helps Trezor users extract the correct private keys needed to claim Midnight (NIGHT) tokens. It works with **both passphrase-protected and standard Trezor wallets**.
+This repository provides tools to help Trezor users claim Midnight tokens from both **Cardano addresses** and **Bitcoin addresses**. The official Midnight Portal has known issues with hardware wallet integration, making these tools necessary for successful claiming.
 
 ## ⚠️ CRITICAL SECURITY WARNING
 
-- **This method requires exposing your hardware wallet seed phrase and passphrase**
-- **NEVER use this on your primary wallet with funds**
-- **RECOMMENDED: Create a NEW Trezor wallet, transfer funds there first**
-- **Use your OLD eligible address in this script for claiming**
-- **Only use on a secure, isolated computer with synced Cardano node**
-- **Delete all generated files immediately after claiming**
-- **Never share your seed phrase or private keys**
-
-## 🔒 Recommended Security Strategy
-
-**CRITICAL: This method requires exposing your seed phrase, so follow this approach:**
-
-### Before Starting:
-1. **Create a NEW Trezor wallet** (generate new seed) 
-2. **Transfer ALL funds** from your old wallet to the new wallet
-3. **Keep your OLD wallet** for this claim process only
-4. **Use your OLD eligible address** in the script (the one with Midnight claim rights)
-
-### **🚨 CRITICAL: Where to Send Claimed Tokens**
-- **NEVER use addresses from your OLD wallet for receiving claimed tokens**
-- **ALWAYS use a fresh address from your NEW secure wallet**
-- **The OLD wallet is compromised once you expose its seed phrase**
-- **Any tokens sent to OLD wallet addresses are at risk**
-
-### Why This Approach:
-- ✅ Your funds are safe in the NEW wallet
-- ✅ Your OLD wallet seed is only used for claiming authorization
-- ✅ Claimed tokens go directly to your secure NEW wallet
-- ✅ If anything goes wrong during claiming, your funds are protected
-- ✅ You can abandon the OLD wallet completely after claiming
-
-### After Claiming:
-- **Claimed tokens should already be in your NEW secure wallet**
-- **Double-check you used NEW wallet address for receiving**
-- Abandon the OLD wallet completely
-- Delete all exposed seed phrase materials
-
-## 🎯 What This Solves
-
-Midnight token claims require importing private keys into Eternl wallet, but Trezor users can't easily extract these keys. This tool:
-
-- ✅ Derives correct payment and staking keys from your Trezor seed
-- ✅ Works with passphrase-protected wallets
-- ✅ Tests multiple derivation scenarios automatically
-- ✅ Generates Eternl-compatible `.skey` files
-- ✅ Provides step-by-step claim instructions
-
-## 📋 Requirements
-
-### Software Requirements
-- **Python 3.8+** with pip (including latest versions like Python 3.13.7)
-- **Browser** with Eternl wallet extension
-- **Cardano Node** (synced mainnet node - see setup instructions below)
-
-### Hardware Requirements
-- **Trezor hardware wallet** (Model T or One)
-- **Your Trezor seed phrase** (12 or 24 words)
-- **Passphrase** (if you use one, otherwise leave empty)
-
-### Wallet Information Needed
-- **Claim address** from Midnight Portal
-- **Payment derivation path** (usually `m/1852'/1815'/0'/0/0`)
-- **Stake key checksum** from your Cardano wallet
-
-## 🚀 Quick Start
-
-### 1. Download Files
-Download these files to a secure folder:
-- `midnight_claim.py` (main script)
-- `cli_convert.py` (CLI format converter - REQUIRED for Eternl)
-- `requirements.txt` (dependencies)
-- `.env.example` (configuration template)
-
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Setup Environment
-Copy the template and create your configuration:
-```bash
-cp .env.example .env
-```
-
-Then edit `.env` with your actual Trezor information (replace ALL placeholder values):
-```env
-# Replace with your actual seed phrase (12 or 24 words)
-TREZOR_SEED_PHRASE=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12
-
-# Replace with your actual passphrase (or leave empty if none)
-TREZOR_PASSPHRASE=YourActualPassphrase
-
-# Replace with your eligible ADA address (the one with Midnight claim rights)
-# See: "How to Get Required Information" section below
-CLAIM_ADDRESS=addr1qxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Standard Trezor derivation path (Account 0 most common)
-# See: "How to Get Required Information" section below for other accounts
-PAYMENT_PATH=m/1852'/1815'/0'/0/0
-
-# Replace with your actual stake key checksum (64 hex characters)
-# See: "How to Get Required Information" section below
-STAKE_CHECKSUM=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-```
-
-### 4. Run the Script
-```bash
-python midnight_claim.py
-```
-
-### 5. Convert Keys to CLI Format (REQUIRED)
-The generated keys need to be converted to CLI format for Eternl compatibility:
-```bash
-python cli_convert.py
-```
-
-This creates the final `.skey` files that Eternl can import.
-
-## 📝 How to Get Required Information
-
-### Getting Your Claim Address
-1. Visit [Midnight Portal](https://midnight.network)
-2. Connect your Trezor wallet  
-3. Navigate to token claim section
-4. Copy the displayed claim address (starts with `addr1q`)
-
-### Getting Your Stake Checksum (Most Important!)
-The stake checksum is a 64-character hex string that identifies your staking key. Here's where to find it:
-
-#### Option 1: From Yoroi Wallet
-1. Open Yoroi wallet with your Trezor
-2. Go to **"Wallet" → "Receive"**
-3. Click **"Show advanced options"** or **"Stake Key"**
-4. Copy the **"Stake Key Hash"** (64 hex characters)
-
-#### Option 2: From AdaLite
-1. Go to [adalite.io](https://adalite.io) and connect your Trezor
-2. Navigate to **"Staking"** section
-3. Look for **"Stake Key Hash"** or **"Reward Address"**
-4. Copy the 64-character hex string
-
-#### Option 3: From Cardano Explorer
-1. Go to [cardanoscan.io](https://cardanoscan.io) or [poolpm.cardano.org](https://poolpm.cardano.org)
-2. Enter your claim address (the addr1q... from Midnight Portal)
-3. Look for **"Stake Address"** or **"Stake Key Hash"**
-4. Copy the 64-character hex value
-
-#### Option 4: From Trezor Suite (if available)
-1. Open Trezor Suite
-2. Go to your Cardano account
-3. Navigate to **"Staking"** or **"Advanced"** section
-4. Find **"Stake Key"** information
-
-**Example of what you're looking for:**
-```
-STAKE_CHECKSUM=a1b2c3d4e5f6789a1b2c3d4e5f6789a1b2c3d4e5f6789a1b2c3d4e5f6789ab
-```
-
-### Getting Payment Path
-The payment derivation path depends on which account your eligible address is in:
-
-#### Standard Trezor Setup
-- **Account 0 (most common)**: `m/1852'/1815'/0'/0/0`
-- **Account 1**: `m/1852'/1815'/1'/0/0`  
-- **Account 2**: `m/1852'/1815'/2'/0/0`
-
-#### How to Determine Your Account
-1. Check your wallet - most users use Account 0
-2. If you created multiple accounts in Yoroi/AdaLite, check which account contains your eligible address
-3. The script will test multiple accounts automatically if the first doesn't work
-
-**Example of what you're setting:**
-```
-PAYMENT_PATH=m/1852'/1815'/0'/0/0
-```
-
-### Double-Check Your Information
-Before running the script, verify:
-- ✅ Claim address matches exactly what Midnight Portal shows
-- ✅ Stake checksum is exactly 64 hex characters (no spaces, no prefixes)
-- ✅ Payment path matches your account number
-- ✅ Seed phrase is exactly as written on your recovery sheet
-
-## 📊 Example Successful Output
-
-When the script works correctly, you'll see output like this:
-
-```
-🎯 Midnight Claim - COMPREHENSIVE TEST
-================================================================================
-Testing multiple accounts, passphrase scenarios, and derivation methods
-Saving all results to: /your/secure/folder/output
-================================================================================
-
-=== QUICK VERIFICATION ===
-✅ Wallet creation successful
-First address (current setup): addr1vexample123...
-Target claim address:          addr1qexample456...
-
-=== COMPREHENSIVE DERIVATION TEST ===
-Target address: addr1qexample456789abcdef...
-Expected stake checksum: 1234567890abcdef...
-
---- Testing current_passphrase ---
-Account 0 payment-only: addr1vexample123...
-Stake 0/0: 1234567890abcdef...
-🔑 STAKE CHECKSUM MATCH! Scenario: current_passphrase
-  Payment Account: 0, Stake Account: 0, Stake Index: 0
-Complete address: addr1qexample456789abcdef...
-🎯 PERFECT MATCH! Complete derivation found!
-
-🎯 MATCH FOUND!
-  Payment Path: m/1852'/1815'/0'/0/0
-  Stake Path: m/1852'/1815'/0'/2/0
-  Address Type: payment_stake
-
-✅ Derivation successful!
-Extracting private keys...
-
-==========================================================================================
-🎊 MIDNIGHT CLAIM KEYS SUCCESSFULLY GENERATED!
-==========================================================================================
-
-📁 KEYS SAVED TO: /your/secure/folder/output
-🔑 Payment Key: midnight_payment_example_12345.skey
-🔑 Stake Key: midnight_stake_example_12345.skey
-📋 Instructions: MIDNIGHT_SUCCESS_example_12345.txt
-
-✅ SUCCESS! Private keys extracted!
-📂 Saved to: /your/secure/folder/output
-📖 Read: MIDNIGHT_SUCCESS_example_12345.txt
-
-🏆 CLAIM TEST SUCCESSFUL!
-Your private keys are ready for Eternl import!
-```
-
-## 🌐 Eternl Import Process
-
-### 1. Install Eternl Wallet
-- Visit [eternl.io](https://eternl.io)
-- Install browser extension
-- Create account
-
-### 2. Import CLI-Converted Keys to Eternl
-**IMPORTANT: Only use the CLI-converted files from step 5 above**
-
-1. Open Eternl → **"Add Wallet"**
-2. Select **"Restore"** → **"Advanced"**
-3. Choose **"Import from CLI signing key"**
-4. **Upload Payment Key**: `midnight_payment_cli.skey` (CLI converted)
-5. **Upload Staking Key**: `midnight_stake_cli.skey` (CLI converted)
-6. **Skip DRep Key** (leave empty - not needed for claims)
-7. **Name wallet**: "Midnight Claim"
-8. **Create wallet**
-
-### 3. Claim Your Tokens
-1. Connect Eternl to Midnight Portal
-2. Navigate to token claim section
-3. Execute claim transaction
-4. Confirm transaction in Eternl
-5. Wait for confirmation
-
-### 4. Secure Cleanup (CRITICAL!)
-⚠️ **IMMEDIATELY after successful claiming:**
-1. **Delete** all `.skey` files from your computer
-2. **Delete** the Eternl wallet you created
-3. **Transfer** claimed tokens to your NEW secure hardware wallet
-4. **Delete** entire project folder
-5. **Clear** browser cache/history
-6. **Abandon** the OLD wallet completely
-
-## 🛠️ Troubleshooting
-
-### For Wallets WITHOUT Passphrase
-If you don't use a passphrase on your Trezor:
-```env
-TREZOR_PASSPHRASE=
-```
-Leave it completely empty - the script will test this scenario automatically.
-
-### Common Issues
-
-**"No immediate match found"**
-- ✅ Script will automatically test multiple scenarios
-- ✅ Verify your seed phrase is exactly correct
-- ✅ Try with empty passphrase if you're unsure
-
-**"Wallet creation failed"**
-- Check seed phrase format (12 or 24 words, space-separated)
-- Verify no extra spaces or special characters
-- Ensure passphrase encoding is correct
-
-**"Eternl says 'Initialisiere acc#0'"**
-- Make sure you used the CLI-converted keys (`*_cli.skey`)
-- If still failing, try alternative wallets (Typhon, Nami)
-- Contact Midnight support for alternative claim methods
-
-**"Permission denied"**
-- Run terminal/command prompt as administrator
-- Ensure Python has write permissions to the folder
-
-**"CLI conversion failed"**
-- Make sure `midnight_claim.py` ran successfully first
-- Check that the original `.skey` files exist
-- Verify file permissions in the output directory
-
-## 🔐 Security Best Practices
-
-1. **Use offline computer** for key generation
-2. **Create NEW wallet first** and transfer funds there
-3. **Never share** seed phrases or private keys
-4. **Delete all files** immediately after successful claim
-5. **Use hardware wallet** for long-term storage
-6. **Double-check** all addresses before sending transactions
-7. **Abandon OLD wallet** after claiming is complete
-
-## ⚠️ Important Notes
-
-### Does This Work Without Passphrase?
-**YES!** The script automatically tests both scenarios:
-- With your provided passphrase
-- With empty passphrase
-- With various passphrase normalizations
-
-### Seed Phrase Length Support
-- **12-word seeds**: Fully supported
-- **24-word seeds**: Fully supported
-- Both are tested automatically
-
-## 🔗 Cardano Node Setup (Required)
-
-You need a **synced Cardano mainnet node** for address verification and network communication.
-
-### Installation Options
-
-#### Option 1: Daedalus Wallet (Easiest)
-- Download from [daedaluswallet.io](https://daedaluswallet.io)
-- Includes built-in Cardano node
-- Automatically syncs mainnet
-- No manual configuration needed
-
-#### Option 2: Dedicated Cardano Node (Recommended for this script)
-
-### Windows Setup
-
-1. **Download Cardano Node:**
-   - Visit: https://github.com/IntersectMBO/cardano-node/releases
-   - Download latest Windows release
-   - Extract to: `C:\Users\username\AppData\Roaming\Cardano`
-
-2. **Download Configuration Files:**
-   - Get `mainnet-topology.json` and `mainnet-config.yaml` from:
-     https://github.com/input-output-hk/cardano-node/tree/master/configuration/cardano
-   - Place them in your cardano-node folder
-
-3. **Run Cardano Node:**
-   ```cmd
-   cardano-node.exe run ^
-       --topology ./configuration/cardano/mainnet-topology.json ^
-       --database-path ./state ^
-       --port 3001 ^
-       --config ./configuration/cardano/mainnet-config.yaml ^
-       --socket-path \\.\pipe\cardano-node
-   ```
-
-4. **Set Environment Variable:**
-   ```cmd
-   set CARDANO_NODE_SOCKET_PATH=\\.\pipe\cardano-node
-   ```
-
-5. **Verify Setup:**
-   ```cmd
-   echo %CARDANO_NODE_SOCKET_PATH%
-   cardano-cli query tip --mainnet
-   ```
-
-### Linux Setup
-
-1. **Download and Extract:**
-   ```bash
-   wget https://github.com/IntersectMBO/cardano-node/releases/download/8.9.1/cardano-node-8.9.1-linux.tar.gz
-   tar -zxvf cardano-node-8.9.1-linux.tar.gz
-   ```
-
-2. **Run Cardano Node:**
-   ```bash
-   chmod +x run_cardano_node.sh
-   ./run_cardano_node.sh
-   ```
-
-3. **Set Environment Variable:**
-   ```bash
-   echo "export CARDANO_NODE_SOCKET_PATH=/home/username/Cardano/db/socket" >> ~/.bashrc
-   source ~/.bashrc
-   ```
-
-4. **Verify Setup:**
-   ```bash
-   echo $CARDANO_NODE_SOCKET_PATH
-   cardano-cli query tip --mainnet
-   ```
-
-### Successful Sync Verification
-
-When properly synced, `cardano-cli query tip --mainnet` should return:
-```json
-{
-    "block": 10241329,
-    "epoch": 481,
-    "era": "Babbage",
-    "hash": "ac21826f9da1facad7634b1cf3d7d62d414238dc58fc871807136bb38dd63290",
-    "slot": 122664226,
-    "slotInEpoch": 235426,
-    "slotsToEpochEnd": 196574,
-    "syncProgress": "100.00"
-}
-```
-
-**Important:** Wait for `"syncProgress": "100.00"` before running the claim script.
-
-### Detailed Setup Tutorials
-- **Windows:** https://docs.cardano.org/native-tokens/getting-started
-- **Official Node Documentation:** https://developers.cardano.org/docs/get-started/running-cardano
-
-## ✅ Tested Configuration
-
-This tool has been successfully tested with the following setup:
-
-### Hardware & Wallet:
-- **OS**: Windows 11
-- **Hardware Wallet**: Trezor Model T with passphrase protection
-- **Cardano Node**: Fully synced mainnet node
-
-### Software Environment:
-- **Browser**: Brave Browser
-- **Wallet Extension**: Eternl Wallet
-- **Python**: 3.8+
-
-### Test Results:
-- ✅ **Seed phrase derivation**: Working correctly
-- ✅ **Passphrase handling**: All scenarios tested successfully  
-- ✅ **Key extraction**: Generated valid .skey files
-- ✅ **Eternl import**: Keys imported without issues
-- ✅ **Token claiming**: Successful Midnight token claim completed
-
-*Your mileage may vary with different configurations, but this represents a confirmed working setup.*
-
-## 👍 Support This Project
-
-If this tool helped you successfully claim your Midnight tokens, consider sending a small tip to support development and maintenance:
-
-### QR Codes for Easy Donations:
-
-**ADA Address:** `addr1qxk3cq8emwuusdlas04yn0qf3xndd6ts6ta7l3kh4vphuhss0y3k3y7r4ztz6xy0xjysj4j9ksysnlhnp0stqdwwyusq9g5th3`
-
-![ADA Donation QR Code](donation_qr_ada.png)
-
-**BTC Address:** `bc1qkj9f592hlj3m26eukc54xruls6pdzqs70ly8a5`
-
-![BTC Donation QR Code](donation_qr_btc.png)
-
-*Tips help maintain this project and keep it updated for the community!*
-
-## 🆘 Support
-
-- **Script Issues**: Create GitHub issue with error details
-- **Midnight Claims**: Contact Midnight support team
-- **Eternl Problems**: Visit Eternl documentation
-- **Cardano Questions**: Cardano community forums
-
-## 📄 Disclaimer
-
-- **This tool is provided as-is**
-- **Authors not responsible for lost funds**
-- **Always verify outputs independently**
-- **Use only for legitimate token claims**
-- **Delete all private keys after use**
-- **This method exposes your seed phrase - use recommended security strategy**
+- **These tools require exposing your hardware wallet seed phrase and passphrase**
+- **NEVER use these tools on your primary wallet with funds**
+- **ALWAYS create a NEW wallet first and transfer funds there**
+- **Only use your OLD eligible addresses for claiming authorization**
+- **Delete all generated private keys immediately after claiming**
+- **Use only on secure, isolated computers**
+
+## 🎯 Choose Your Claim Type
+
+### 🔗 Cardano Address Claims
+**For users with eligible ADA addresses**
+
+If your Midnight token eligibility is tied to a Cardano address (starts with `addr1`):
+
+**👉 [Go to Cardano Claim Guide](cardano-claim/README_CARDANO.md)**
+
+**What you'll need:**
+- Synced Cardano node
+- Eternl wallet browser extension
+- Stake key information from your Cardano wallet
+
+**Process:**
+- Generate Cardano `.skey` files
+- Convert to CLI format
+- Import to Eternl wallet
+- Execute claim through Midnight Portal
 
 ---
 
-**🌙 Successfully claim your Midnight tokens safely!**
+### ₿ Bitcoin Address Claims
+**For users with eligible Bitcoin addresses**
 
-*Remember: Security first - create new wallet, use old eligible address, delete everything after claiming!*
+If your Midnight token eligibility is tied to a Bitcoin address (starts with `1`, `3`, or `bc1`):
+
+**👉 [Go to Bitcoin Claim Guide](bitcoin-claim/README_BITCOIN.md)**
+
+**What you'll need:**
+- Software Bitcoin wallet (Electrum, Sparrow, etc.)
+- No blockchain node required
+
+**Process:**
+- Generate Bitcoin WIF private keys
+- Import to software wallet
+- Execute claim through Midnight Portal
+
+## 🔒 Universal Security Strategy
+
+**Both claim methods use the same critical security approach:**
+
+### Before Starting ANY Claim:
+1. **Create a NEW Trezor wallet** with fresh seed phrase
+2. **Transfer ALL funds** from your old wallet to the new wallet
+3. **Keep your OLD wallet** for claiming authorization only
+4. **Never mix the two wallets**
+
+### During Claiming:
+- **OLD wallet** = Proves eligibility (becomes compromised when seed exposed)
+- **NEW wallet** = Receives claimed tokens (stays secure)
+- **Never use OLD wallet addresses for receiving anything**
+
+### After Claiming:
+- **Immediately delete** all private key files
+- **Transfer claimed tokens** to your NEW secure wallet
+- **Abandon the OLD wallet completely**
+- **Clear all traces** from your computer
+
+## 📋 General Requirements
+
+### Hardware Requirements
+- **Trezor Model T or Trezor One**
+- **Your Trezor seed phrase** (12 or 24 words)
+- **Passphrase** (if you use one)
+
+### Software Requirements
+- **Python 3.8+** with pip
+- **Secure computer** (preferably offline during key generation)
+- **Browser** for Midnight Portal access
+
+### Information You'll Need
+- **Eligible address** (Cardano or Bitcoin)
+- **Your Trezor seed phrase and passphrase**
+- **Derivation information** (varies by claim type)
+
+## 🚨 Why These Tools Are Necessary
+
+### Portal Hardware Wallet Issues
+The official Midnight Portal has documented problems with:
+- Trezor passphrase-protected wallets
+- Proper derivation path detection
+- Hardware wallet connection stability
+- Cross-browser compatibility
+
+### Our Solution
+These tools bypass portal issues by:
+- Extracting private keys directly from Trezor seeds
+- Testing multiple derivation scenarios automatically
+- Supporting both passphrase-protected and standard wallets
+- Providing reliable key formats for software wallet import
+
+## 🛠️ Repository Structure
+
+```
+/
+├── README.md (this file)
+├── cardano-claim/
+│   ├── README_CARDANO.md
+│   ├── midnight_claim_cardano.py
+│   ├── cli_convert.py
+│   ├── requirements_cardano.txt
+│   └── .env.example_cardano
+├── bitcoin-claim/
+│   ├── README_BITCOIN.md
+│   ├── midnight_claim_bitcoin.py
+│   ├── requirements_bitcoin.txt
+│   └── .env.example_bitcoin
+└── docs/
+    ├── SECURITY_GUIDE.md
+    ├── TROUBLESHOOTING.md
+    └── FAQ.md
+```
+
+## ⚡ Quick Start Guide
+
+1. **Determine your claim type** (Cardano or Bitcoin address)
+2. **Create NEW wallet** and transfer funds there first
+3. **Follow the specific guide** for your claim type
+4. **Extract private keys** using the appropriate tool
+5. **Import to software wallet** and execute claim
+6. **Immediately delete** all private key files
+7. **Transfer claimed tokens** to your NEW secure wallet
+
+## ✅ Tested Configurations
+
+### Successfully Tested:
+- **Trezor Model T** with passphrase protection
+- **Trezor One** with and without passphrase
+- **12-word and 24-word seed phrases**
+- **Windows 11** and **Linux** environments
+- **Multiple Bitcoin address types** (Legacy, SegWit, Native SegWit)
+- **Cardano mainnet addresses** with staking keys
+
+### Confirmed Working Wallets:
+- **Cardano**: Eternl, Typhon, Nami
+- **Bitcoin**: Electrum, Sparrow, Bitcoin Core
+
+## 🔍 FAQ
+
+### Q: Which claim type do I need?
+**A:** Check your Midnight Portal eligibility. If it shows a Cardano address (`addr1...`), use the Cardano guide. If it shows a Bitcoin address (`1...`, `3...`, or `bc1...`), use the Bitcoin guide.
+
+### Q: Can I use both tools?
+**A:** Only if you have eligibility on both blockchains. Most users have eligibility on only one chain.
+
+### Q: Is this safe?
+**A:** When following the security strategy (NEW wallet for funds, OLD wallet for claiming), yes. The key is never mixing the two wallets.
+
+### Q: Do I need technical knowledge?
+**A:** Basic command-line usage is required. The guides provide step-by-step instructions for all technical steps.
+
+### Q: What if something goes wrong?
+**A:** If you follow the security strategy, your funds remain safe in your NEW wallet. You can retry the claiming process or contact Midnight support for alternatives.
+
+## 🆘 Support
+
+### Technical Issues
+- **Script problems**: Create GitHub issue with detailed error information
+- **General guidance**: Check the FAQ and troubleshooting documents
+
+### Midnight Claims
+- **Portal issues**: Contact Midnight support team
+- **Eligibility questions**: Midnight Portal help section
+
+### Wallet Support
+- **Eternl problems**: Visit Eternl documentation
+- **Bitcoin wallet issues**: Consult specific wallet documentation
+
+## ⚖️ Important Disclaimers
+
+- **These tools are provided as-is without warranty**
+- **Authors are not responsible for lost funds or failed claims**
+- **Always verify all outputs independently**
+- **Use only for legitimate Midnight token claims**
+- **This method exposes seed phrases - follow security strategy strictly**
+- **Test with small amounts first when possible**
+
+## 👍 Support This Project
+
+If these tools helped you successfully claim your Midnight tokens:
+
+**Bitcoin**: `bc1qkj9f592hlj3m26eukc54xruls6pdzqs70ly8a5`
+**Cardano**: `addr1qxk3cq8emwuusdlas04yn0qf3xndd6ts6ta7l3kh4vphuhss0y3k3y7r4ztz6xy0xjysj4j9ksysnlhnp0stqdwwyusq9g5th3`
+
+Tips help maintain and improve these tools for the community.
+
+---
+
+## 🚀 Ready to Claim?
+
+**Choose your path:**
+
+- **🔗 [Cardano Address Claims →](cardano-claim/README_CARDANO.md)**
+- **₿ [Bitcoin Address Claims →](bitcoin-claim/README_BITCOIN.md)**
+
+**Remember: Security first - create new wallet, use old address for claiming, delete everything after claiming!**
