@@ -11,11 +11,13 @@ from pathlib import Path
 from typing import Optional, Dict
 import threading
 import queue
-from PIL import Image, ImageTk
 
 from ..services.cardano_service import CardanoService
 from ..services.bitcoin_service import BitcoinService
-from ..utils.security import SecurityManager, SecureEntry, SecureText, validate_seed_phrase_format, validate_address_format
+from ..utils.security import (
+    SecurityManager, SecureEntry, SecureText, 
+    validate_seed_phrase_format, validate_address_format, validate_stake_checksum
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,11 @@ class MidnightClaimerGUI:
         
         # Create main interface
         self.create_widgets()
+        
+        # Show memory warning first
+        if not self.security_manager.show_memory_warning():
+            self.root.quit()
+            return
         
         # Show welcome screen
         self.show_welcome()
@@ -129,11 +136,11 @@ class MidnightClaimerGUI:
         canvas.configure(yscrollcommand=scrollbar.set)
         
         # Title
-        title_label = ttk.Label(scrollable_frame, text="🌙 Welcome to MidnightClaimer", style="Title.TLabel")
+        title_label = ttk.Label(scrollable_frame, text="Welcome to MidnightClaimer", style="Title.TLabel")
         title_label.pack(pady=(0, 20))
         
         # Warning section
-        warning_frame = ttk.LabelFrame(scrollable_frame, text="⚠️ CRITICAL SECURITY WARNING", padding="15")
+        warning_frame = ttk.LabelFrame(scrollable_frame, text="CRITICAL SECURITY WARNING", padding="15")
         warning_frame.pack(fill=tk.X, pady=(0, 20))
         
         warnings = [
@@ -142,7 +149,9 @@ class MidnightClaimerGUI:
             "ALWAYS create a NEW wallet first and transfer funds there",
             "Only use your OLD eligible addresses for claiming authorization",
             "Delete all generated files immediately after claiming",
-            "Use only on secure, isolated computers"
+            "Use only on secure, isolated computers",
+            "Consider using a live USB operating system",
+            "Restart your computer after claiming to clear memory"
         ]
         
         for warning in warnings:
@@ -150,7 +159,7 @@ class MidnightClaimerGUI:
             warning_label.pack(anchor=tk.W, pady=2)
         
         # Security checklist
-        checklist_frame = ttk.LabelFrame(scrollable_frame, text="✅ Security Checklist - Complete BEFORE Proceeding", padding="15")
+        checklist_frame = ttk.LabelFrame(scrollable_frame, text="Security Checklist - Complete BEFORE Proceeding", padding="15")
         checklist_frame.pack(fill=tk.X, pady=(0, 20))
         
         self.checklist_vars = []
@@ -160,7 +169,9 @@ class MidnightClaimerGUI:
             "I understand my OLD wallet seed will be compromised by this process",
             "I will ONLY use my OLD wallet to prove eligibility for claiming",
             "I will NEVER receive funds on my OLD wallet addresses after this",
-            "I am using a secure, isolated computer for this process"
+            "I am using a secure, isolated computer for this process",
+            "I understand Python memory limitations may leave traces in RAM",
+            "I will restart my computer after the claiming process"
         ]
         
         for item in checklist_items:
@@ -170,7 +181,7 @@ class MidnightClaimerGUI:
             checkbox.pack(anchor=tk.W, pady=2)
         
         # Info section
-        info_frame = ttk.LabelFrame(scrollable_frame, text="ℹ️ What This Tool Does", padding="15")
+        info_frame = ttk.LabelFrame(scrollable_frame, text="What This Tool Does", padding="15")
         info_frame.pack(fill=tk.X)
         
         info_text = """This tool extracts private keys from your Trezor seed phrase to enable claiming Midnight (NIGHT) tokens through software wallets. This bypasses known hardware wallet integration issues with the official Midnight Portal.
@@ -206,7 +217,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         self.claim_type_var = tk.StringVar()
         
         # Cardano option
-        cardano_frame = ttk.LabelFrame(self.content_frame, text="🔗 Cardano Address Claims", padding="20")
+        cardano_frame = ttk.LabelFrame(self.content_frame, text="Cardano Address Claims", padding="20")
         cardano_frame.pack(fill=tk.X, pady=(0, 15))
         
         cardano_radio = ttk.Radiobutton(cardano_frame, text="My eligibility is tied to a Cardano address (starts with 'addr1')",
@@ -219,7 +230,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         cardano_info.pack(anchor=tk.W, pady=(5, 0))
         
         # Bitcoin option
-        bitcoin_frame = ttk.LabelFrame(self.content_frame, text="₿ Bitcoin Address Claims", padding="20")
+        bitcoin_frame = ttk.LabelFrame(self.content_frame, text="Bitcoin Address Claims", padding="20")
         bitcoin_frame.pack(fill=tk.X)
         
         bitcoin_radio = ttk.Radiobutton(bitcoin_frame, text="My eligibility is tied to a Bitcoin address (starts with '1', '3', or 'bc1')",
@@ -258,7 +269,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         canvas.configure(yscrollcommand=scrollbar.set)
         
         # Seed phrase section
-        seed_frame = ttk.LabelFrame(scrollable_frame, text="🔑 Trezor Seed Phrase", padding="15")
+        seed_frame = ttk.LabelFrame(scrollable_frame, text="Trezor Seed Phrase", padding="15")
         seed_frame.pack(fill=tk.X, pady=(0, 15))
         
         seed_label = ttk.Label(seed_frame, text="Enter your 12 or 24 word seed phrase:")
@@ -272,7 +283,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         self.security_manager.register_secure_widget(self.seed_entry)
         
         # Passphrase section
-        passphrase_frame = ttk.LabelFrame(scrollable_frame, text="🔒 Passphrase (Optional)", padding="15")
+        passphrase_frame = ttk.LabelFrame(scrollable_frame, text="Passphrase (Optional)", padding="15")
         passphrase_frame.pack(fill=tk.X, pady=(0, 15))
         
         passphrase_label = ttk.Label(passphrase_frame, text="Enter your passphrase (leave empty if none):")
@@ -286,7 +297,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         self.security_manager.register_secure_widget(self.passphrase_entry)
         
         # Address section
-        address_frame = ttk.LabelFrame(scrollable_frame, text=f"📍 Eligible {self.claim_type.title()} Address", padding="15")
+        address_frame = ttk.LabelFrame(scrollable_frame, text=f"Eligible {self.claim_type.title()} Address", padding="15")
         address_frame.pack(fill=tk.X, pady=(0, 15))
         
         address_label = ttk.Label(address_frame, text=f"Enter your eligible {self.claim_type} address from the Midnight Portal:")
@@ -298,7 +309,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         
         # Additional fields for Cardano
         if self.claim_type == "cardano":
-            stake_frame = ttk.LabelFrame(scrollable_frame, text="🎯 Stake Key Checksum", padding="15")
+            stake_frame = ttk.LabelFrame(scrollable_frame, text="Stake Key Checksum", padding="15")
             stake_frame.pack(fill=tk.X, pady=(0, 15))
             
             stake_label = ttk.Label(stake_frame, text="Enter your stake key checksum (64-character hex):")
@@ -363,7 +374,7 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
         """Show results screen"""
         self.clear_content_frame()
         self.current_step = 4
-        self.progress_var.set("Step 5 of 5: Success!")
+        self.progress_var.set("Step 5 of 5: Results")
         
         if self.derivation_result:
             self.show_success_screen()
@@ -372,11 +383,11 @@ The tool supports both Cardano and Bitcoin address claims and uses comprehensive
     
     def show_success_screen(self):
         """Show success screen with key extraction results"""
-        title_label = ttk.Label(self.content_frame, text="🎉 Success! Keys Found!", style="Title.TLabel")
+        title_label = ttk.Label(self.content_frame, text="Success! Keys Found!", style="Title.TLabel")
         title_label.pack(pady=(0, 20))
         
         # Success info
-        success_frame = ttk.LabelFrame(self.content_frame, text="✅ Derivation Successful", padding="15")
+        success_frame = ttk.LabelFrame(self.content_frame, text="Derivation Successful", padding="15")
         success_frame.pack(fill=tk.X, pady=(0, 20))
         
         if self.claim_type == "cardano":
@@ -395,7 +406,7 @@ Scenario: {self.derivation_result['scenario_name']}"""
         info_label.pack(anchor=tk.W)
         
         # Next steps
-        steps_frame = ttk.LabelFrame(self.content_frame, text="📋 Next Steps", padding="15")
+        steps_frame = ttk.LabelFrame(self.content_frame, text="Next Steps", padding="15")
         steps_frame.pack(fill=tk.X, pady=(0, 20))
         
         steps_text = """1. Click 'Extract Keys' to generate your private key files
@@ -403,7 +414,8 @@ Scenario: {self.derivation_result['scenario_name']}"""
 3. Import keys to your software wallet
 4. Connect to Midnight Portal and execute claim
 5. IMMEDIATELY delete all private key files after claiming
-6. Transfer claimed tokens to your NEW secure wallet"""
+6. Transfer claimed tokens to your NEW secure wallet
+7. Restart your computer to clear memory"""
         
         steps_label = ttk.Label(steps_frame, text=steps_text, style="Subtitle.TLabel")
         steps_label.pack(anchor=tk.W)
@@ -419,11 +431,11 @@ Scenario: {self.derivation_result['scenario_name']}"""
     
     def show_failure_screen(self):
         """Show failure screen with troubleshooting information"""
-        title_label = ttk.Label(self.content_frame, text="❌ No Matching Keys Found", style="Title.TLabel")
+        title_label = ttk.Label(self.content_frame, text="No Matching Keys Found", style="Title.TLabel")
         title_label.pack(pady=(0, 20))
         
         # Error info
-        error_frame = ttk.LabelFrame(self.content_frame, text="🔍 Analysis", padding="15")
+        error_frame = ttk.LabelFrame(self.content_frame, text="Analysis", padding="15")
         error_frame.pack(fill=tk.X, pady=(0, 20))
         
         error_text = """No derivation scenario matched your provided information. This typically indicates:
@@ -437,7 +449,7 @@ Scenario: {self.derivation_result['scenario_name']}"""
         error_label.pack(anchor=tk.W)
         
         # Troubleshooting steps
-        steps_frame = ttk.LabelFrame(self.content_frame, text="🛠️ Troubleshooting Steps", padding="15")
+        steps_frame = ttk.LabelFrame(self.content_frame, text="Troubleshooting Steps", padding="15")
         steps_frame.pack(fill=tk.X, pady=(0, 20))
         
         steps_text = """1. Double-check your seed phrase against your Trezor
@@ -509,16 +521,16 @@ Scenario: {self.derivation_result['scenario_name']}"""
                 elif msg_type == "COMPLETE":
                     self.derivation_progress['value'] = 100
                     if data:
-                        self.status_label.configure(text="✅ Keys found successfully!", foreground="green")
+                        self.status_label.configure(text="Keys found successfully!", foreground="green")
                     else:
-                        self.status_label.configure(text="❌ No matching keys found", foreground="red")
+                        self.status_label.configure(text="No matching keys found", foreground="red")
                     
                     # Enable next button after brief delay
                     self.root.after(2000, lambda: self.next_button.configure(state="normal"))
                     return
                     
                 elif msg_type == "ERROR":
-                    self.status_label.configure(text=f"❌ Error: {data}", foreground="red")
+                    self.status_label.configure(text=f"Error: {data}", foreground="red")
                     self.next_button.configure(state="normal")
                     return
                     
@@ -556,10 +568,11 @@ Scenario: {self.derivation_result['scenario_name']}"""
             messagebox.showinfo("Keys Extracted Successfully", 
                               f"Your private keys have been saved to:\n{workspace}\n\n"
                               f"Please read the instruction file:\n{Path(instruction_file).name}\n\n"
-                              f"IMPORTANT: Delete all files immediately after claiming!")
+                              f"CRITICAL: Delete all files immediately after claiming!\n"
+                              f"Restart your computer after claiming to clear memory!")
             
             # Update button
-            self.extract_button.configure(text="Keys Extracted ✓", state="disabled")
+            self.extract_button.configure(text="Keys Extracted", state="disabled")
             
         except Exception as e:
             logger.error(f"Key extraction failed: {e}")
@@ -599,8 +612,14 @@ Scenario: {self.derivation_result['scenario_name']}"""
         # Validate stake checksum for Cardano
         if self.claim_type == "cardano" and hasattr(self, 'stake_entry'):
             stake_checksum = self.stake_entry.get().strip()
-            if stake_checksum and len(stake_checksum) != 64:
-                self.validation_label.configure(text="Stake checksum must be exactly 64 characters", foreground="red")
+            if stake_checksum:
+                stake_valid, stake_error = validate_stake_checksum(stake_checksum)
+                if not stake_valid:
+                    self.validation_label.configure(text=f"Stake checksum: {stake_error}", foreground="red")
+                    self.next_button.configure(state="disabled")
+                    return
+            else:
+                self.validation_label.configure(text="Stake checksum required for Cardano claims", foreground="red")
                 self.next_button.configure(state="disabled")
                 return
         
@@ -608,13 +627,13 @@ Scenario: {self.derivation_result['scenario_name']}"""
         if seed_phrase and address:
             if self.claim_type == "cardano":
                 if hasattr(self, 'stake_entry') and self.stake_entry.get().strip():
-                    self.validation_label.configure(text="✓ All inputs valid", foreground="green")
+                    self.validation_label.configure(text="All inputs valid", foreground="green")
                     self.next_button.configure(state="normal")
                 else:
                     self.validation_label.configure(text="Stake checksum required for Cardano claims", foreground="red")
                     self.next_button.configure(state="disabled")
             else:
-                self.validation_label.configure(text="✓ All inputs valid", foreground="green")
+                self.validation_label.configure(text="All inputs valid", foreground="green")
                 self.next_button.configure(state="normal")
         else:
             self.validation_label.configure(text="Please fill in all required fields", foreground="orange")
@@ -680,7 +699,10 @@ Scenario: {self.derivation_result['scenario_name']}"""
                               "Would you like to securely clean up all temporary files now?\n"
                               "(Recommended immediately after importing to your wallet)"):
             if self.security_manager.secure_cleanup():
-                messagebox.showinfo("Cleanup Complete", "All temporary files have been securely deleted.")
+                messagebox.showinfo("Cleanup Complete", 
+                                   "All temporary files have been securely deleted.\n\n"
+                                   "IMPORTANT: Restart your computer to clear any remaining "
+                                   "traces from memory.")
         
         self.root.quit()
     

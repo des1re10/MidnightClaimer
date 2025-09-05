@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Optional, Dict, Callable
 from mnemonic import Mnemonic
 from bitcoinlib.keys import HDKey
+import hashlib
+import base58
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +25,66 @@ class BitcoinService:
     def validate_seed_phrase(self, seed_phrase: str) -> bool:
         """Validate mnemonic seed phrase"""
         try:
+            if not seed_phrase or not seed_phrase.strip():
+                return False
+            
+            # Check word count first
+            words = seed_phrase.strip().split()
+            if len(words) not in [12, 15, 18, 21, 24]:
+                return False
+            
             return self.mnemo.check(seed_phrase.strip())
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Seed phrase validation failed: {e}")
+            return False
+    
+    def validate_bitcoin_address_format(self, address: str) -> bool:
+        """Validate Bitcoin address format"""
+        try:
+            if not address or not address.strip():
+                return False
+            
+            address = address.strip()
+            
+            # Check basic format
+            if address.startswith('1'):
+                # Legacy P2PKH - should be 25-34 characters, base58
+                if len(address) < 25 or len(address) > 34:
+                    return False
+                try:
+                    base58.b58decode_check(address)
+                    return True
+                except:
+                    return False
+            elif address.startswith('3'):
+                # P2SH - should be 25-34 characters, base58
+                if len(address) < 25 or len(address) > 34:
+                    return False
+                try:
+                    base58.b58decode_check(address)
+                    return True
+                except:
+                    return False
+            elif address.startswith('bc1'):
+                # Bech32 - should be 39-59 characters
+                if len(address) < 39 or len(address) > 59:
+                    return False
+                # Basic bech32 format check
+                if not all(c in 'qpzry9x8gf2tvdw0s3jn54khce6mua7l' for c in address[3:]):
+                    return False
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            logger.debug(f"Address format validation failed: {e}")
             return False
     
     def detect_address_type(self, address: str) -> str:
         """Auto-detect Bitcoin address type from format"""
+        if not self.validate_bitcoin_address_format(address):
+            raise ValueError(f"Invalid Bitcoin address format: {address}")
+            
         if address.startswith('1'):
             return 'legacy'
         elif address.startswith('3'):
@@ -49,15 +105,65 @@ class BitcoinService:
         else:
             raise ValueError(f"Unsupported address type: {address_type}")
     
+    def _validate_derived_key(self, derived_key) -> bool:
+        """Validate that a derived key is properly formed"""
+        try:
+            # Check if private key exists and is valid length
+            if not hasattr(derived_key, 'private_hex') or not derived_key.private_hex:
+                return False
+            
+            # Private key should be 64 hex characters (32 bytes)
+            if len(derived_key.private_hex) != 64:
+                return False
+            
+            # Check if it's valid hex
+            try:
+                int(derived_key.private_hex, 16)
+            except ValueError:
+                return False
+            
+            # Check if WIF can be generated
+            if not hasattr(derived_key, 'wif') or not derived_key.wif():
+                return False
+            
+            return True
+            
+        except Exception as e:
+            logger.debug(f"Key validation failed: {e}")
+            return False
+    
     def derive_bitcoin_key(self, seed_phrase: str, passphrase: str, account: int, 
                           address_index: int, address_type: str) -> Optional[Dict]:
         """Derive Bitcoin private key for given parameters"""
         try:
+            # Validate inputs first
+            if not self.validate_seed_phrase(seed_phrase):
+                logger.debug("Invalid seed phrase provided")
+                return None
+            
+            if account < 0 or account > 100:  # Reasonable limits
+                logger.debug(f"Account number out of range: {account}")
+                return None
+                
+            if address_index < 0 or address_index > 1000:  # Reasonable limits
+                logger.debug(f"Address index out of range: {address_index}")
+                return None
+            
             # Create seed from mnemonic
             seed = self.mnemo.to_seed(seed_phrase, passphrase=passphrase)
             
+            # Validate seed length
+            if len(seed) != 64:  # Should be 512 bits (64 bytes)
+                logger.debug(f"Invalid seed length: {len(seed)}")
+                return None
+            
             # Create master key
             master_key = HDKey.from_seed(seed)
+            
+            # Validate master key
+            if not master_key or not hasattr(master_key, 'subkey_for_path'):
+                logger.debug("Failed to create valid master key")
+                return None
             
             # Get derivation path
             derivation_path = self.get_derivation_path(address_type, account, 0, address_index)
@@ -65,15 +171,30 @@ class BitcoinService:
             # Derive key
             derived_key = master_key.subkey_for_path(derivation_path)
             
+            # Validate derived key
+            if not self._validate_derived_key(derived_key):
+                logger.debug(f"Invalid derived key for path: {derivation_path}")
+                return None
+            
             # Generate address based on type
-            if address_type == 'legacy':
-                address = derived_key.address()
-            elif address_type == 'segwit':
-                address = derived_key.address(script_type='p2sh_p2wpkh')
-            elif address_type == 'native_segwit':
-                address = derived_key.address(script_type='p2wpkh')
-            else:
-                raise ValueError(f"Unsupported address type: {address_type}")
+            try:
+                if address_type == 'legacy':
+                    address = derived_key.address()
+                elif address_type == 'segwit':
+                    address = derived_key.address(script_type='p2sh_p2wpkh')
+                elif address_type == 'native_segwit':
+                    address = derived_key.address(script_type='p2wpkh')
+                else:
+                    logger.debug(f"Unsupported address type: {address_type}")
+                    return None
+            except Exception as e:
+                logger.debug(f"Address generation failed: {e}")
+                return None
+            
+            # Validate generated address
+            if not self.validate_bitcoin_address_format(address):
+                logger.debug(f"Generated invalid address: {address}")
+                return None
             
             return {
                 'address': address,
@@ -110,6 +231,30 @@ class BitcoinService:
         """
         if progress_callback:
             progress_callback("Starting comprehensive Bitcoin derivation test...", 0)
+        
+        # Validate inputs first
+        if not self.validate_seed_phrase(seed_phrase):
+            if progress_callback:
+                progress_callback("Invalid seed phrase format", 100)
+            logger.error("Invalid seed phrase provided")
+            return None
+        
+        if not self.validate_bitcoin_address_format(eligible_address):
+            if progress_callback:
+                progress_callback("Invalid target address format", 100)
+            logger.error(f"Invalid target address format: {eligible_address}")
+            return None
+        
+        # Verify address type matches target address
+        try:
+            detected_type = self.detect_address_type(eligible_address)
+            if detected_type != address_type:
+                logger.warning(f"Address type mismatch: detected {detected_type}, expected {address_type}")
+                address_type = detected_type  # Use detected type
+        except Exception as e:
+            if progress_callback:
+                progress_callback(f"Address type detection failed: {e}", 100)
+            return None
         
         # Passphrase scenarios to test
         passphrase_scenarios = [
@@ -178,6 +323,12 @@ class BitcoinService:
             address = derivation_result['address']
             private_key_wif = derivation_result['private_key_wif']
             
+            # Validate WIF key before saving
+            from ..utils.security import validate_bitcoin_wif
+            wif_valid, wif_error = validate_bitcoin_wif(private_key_wif)
+            if not wif_valid:
+                raise ValueError(f"Generated invalid WIF key: {wif_error}")
+            
             # Create safe filename from address
             safe_addr = address[:12].replace('1', '').replace('3', '').replace('bc1q', 'bc1q')
             process_id = os.getpid()
@@ -186,6 +337,9 @@ class BitcoinService:
             wif_file = output_dir / f"midnight_bitcoin_private_{safe_addr}_{process_id}.wif"
             with open(wif_file, 'w') as f:
                 f.write(private_key_wif)
+            
+            # Set restrictive permissions on the file
+            os.chmod(wif_file, 0o600)
             
             return {
                 'wif_file': str(wif_file),
@@ -207,7 +361,7 @@ class BitcoinService:
         instructions_file = output_dir / f"BITCOIN_INSTRUCTIONS_{safe_addr}_{process_id}.txt"
         
         with open(instructions_file, 'w', encoding='utf-8') as f:
-            f.write("🎉 MIDNIGHT BITCOIN CLAIM KEY SUCCESSFULLY GENERATED!\n")
+            f.write("MIDNIGHT BITCOIN CLAIM KEY SUCCESSFULLY GENERATED!\n")
             f.write("=" * 80 + "\n\n")
             
             f.write("DERIVATION DETAILS:\n")
@@ -217,10 +371,10 @@ class BitcoinService:
             f.write(f"Account: {key_info['derivation_info']['account']}\n")
             f.write(f"Address Index: {key_info['derivation_info']['address_index']}\n\n")
             
-            f.write("🔑 PRIVATE KEY FILE:\n")
+            f.write("PRIVATE KEY FILE:\n")
             f.write(f"WIF Format: {Path(key_info['wif_file']).name}\n\n")
             
-            f.write("🚀 SOFTWARE WALLET IMPORT INSTRUCTIONS:\n")
+            f.write("SOFTWARE WALLET IMPORT INSTRUCTIONS:\n")
             f.write("=" * 50 + "\n")
             f.write("OPTION 1: Electrum Wallet (Recommended)\n")
             f.write("1. Download Electrum from electrum.org\n")
@@ -247,18 +401,22 @@ class BitcoinService:
             f.write(f"5. Paste WIF key from: {Path(key_info['wif_file']).name}\n")
             f.write("6. Create Wallet\n\n")
             
-            f.write("⚠️ IMMEDIATELY AFTER CLAIMING:\n")
-            f.write("=" * 30 + "\n")
+            f.write("SECURITY REQUIREMENTS - IMMEDIATELY AFTER CLAIMING:\n")
+            f.write("=" * 50 + "\n")
             f.write(f"1. DELETE: {Path(key_info['wif_file']).name}\n")
             f.write("2. DELETE: Software wallet you created\n")
             f.write("3. Transfer Midnight tokens to NEW secure hardware wallet\n")
             f.write("4. Delete entire project folder\n")
             f.write("5. Clear browser cache/history\n")
-            f.write("6. Abandon OLD wallet completely\n\n")
+            f.write("6. Restart computer to clear memory\n")
+            f.write("7. Abandon OLD wallet completely\n\n")
             
-            f.write("🔐 SECURITY REMINDER:\n")
+            f.write("SECURITY REMINDER:\n")
             f.write("- Your OLD wallet seed is now compromised\n")
             f.write("- Never use OLD wallet addresses for receiving anything\n")
             f.write("- All future transactions should use your NEW secure wallet\n")
+        
+        # Set restrictive permissions on instructions file
+        os.chmod(instructions_file, 0o600)
         
         return str(instructions_file)
