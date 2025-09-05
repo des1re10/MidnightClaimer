@@ -88,16 +88,37 @@ mock_pycardano.key.ExtendedSigningKey = mock_extended_signing_key_class
 
 # Create mock HDWallet for Cardano tests
 mock_derived_key = MagicMock()
-# Set public_key as bytes with proper length support
-test_public_key = b'test_public_key_32_bytes_long_abc'  # 32 bytes
-mock_derived_key.public_key = test_public_key
+# Set public_key as a mock that behaves like bytes with proper length support
+test_public_key_data = b'test_public_key_32_bytes_long_abc'  # 32 bytes
+
+# Create a mock public_key that behaves like bytes but supports len()
+mock_public_key = Mock()
+mock_public_key.__len__ = Mock(return_value=len(test_public_key_data))
+mock_public_key.__bytes__ = Mock(return_value=test_public_key_data)
+mock_public_key.__getitem__ = Mock(side_effect=lambda i: test_public_key_data[i])
+# Make it act like bytes for most operations
+for attr_name in ['hex', 'decode']:
+    if hasattr(test_public_key_data, attr_name):
+        setattr(mock_public_key, attr_name, Mock(return_value=getattr(test_public_key_data, attr_name)()))
+
+mock_derived_key.public_key = mock_public_key
 # Ensure the derived key itself also has length support
 mock_derived_key.__len__ = Mock(return_value=32)
 
 mock_hdwallet = MagicMock()
 mock_hdwallet.derive_from_path = Mock(return_value=mock_derived_key)
+
+# Ensure consistent returns across test runs
+def mock_derive_from_path(*args, **kwargs):
+    return mock_derived_key
+
+mock_hdwallet.derive_from_path = Mock(side_effect=mock_derive_from_path)
+# Ensure the HDWallet always returns the same configured mock
+def mock_hdwallet_from_mnemonic(*args, **kwargs):
+    return mock_hdwallet
+
 mock_hdwallet_class = MagicMock()
-mock_hdwallet_class.from_mnemonic = Mock(return_value=mock_hdwallet)
+mock_hdwallet_class.from_mnemonic = Mock(side_effect=mock_hdwallet_from_mnemonic)
 mock_pycardano.HDWallet = mock_hdwallet_class
 
 # Create mock for Bitcoin libraries
@@ -140,17 +161,17 @@ def create_bitcoin_hdkey_mock(address_type="legacy", derivation_path=None):
         mock_key.private_hex = "a" * 64  # Default private key hex
         
         if address_type == "legacy":
-            mock_key.address = lambda: "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
+            mock_key.address = Mock(return_value="1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")
         elif address_type == "segwit":
-            mock_key.address = lambda: "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+            mock_key.address = Mock(return_value="3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy")
         else:  # native_segwit
-            mock_key.address = lambda: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+            mock_key.address = Mock(return_value="bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
     
     # Configure WIF generation (always compressed for newer types)
     if address_type == "legacy":
-        mock_key.wif = lambda: "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ"
+        mock_key.wif = Mock(return_value="5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ")
     else:
-        mock_key.wif = lambda: "L1aW4aubDFB7yfras2S1mN3bqg9nwySY8nkoLmJebSLD5BWv3ENZ"
+        mock_key.wif = Mock(return_value="L1aW4aubDFB7yfras2S1mN3bqg9nwySY8nkoLmJebSLD5BWv3ENZ")
     
     return mock_key
 
@@ -178,11 +199,15 @@ def mock_subkey_for_path(path):
     _mock_key_cache[path] = mock
     return mock
 
-mock_bitcoin_hdkey.subkey_for_path = mock_subkey_for_path
+mock_bitcoin_hdkey.subkey_for_path = Mock(side_effect=mock_subkey_for_path)
+
+# Ensure the HDKey always returns the same configured mock
+def mock_hdkey_from_seed(*args, **kwargs):
+    return mock_bitcoin_hdkey
 
 # Configure HDKey as a class-like mock
 mock_hdkey_class = MagicMock()
-mock_hdkey_class.from_seed = Mock(return_value=mock_bitcoin_hdkey)
+mock_hdkey_class.from_seed = Mock(side_effect=mock_hdkey_from_seed)
 mock_bitcoinlib.keys.HDKey = mock_hdkey_class
 
 # Mock base58 for address and WIF validation
@@ -263,6 +288,51 @@ def reset_gui_mocks():
     mock_messagebox.showwarning.reset_mock()
     mock_messagebox.showerror.reset_mock()
 
+@pytest.fixture(autouse=True)
+def ensure_crypto_mock_consistency():
+    """Ensure crypto mocks remain consistently configured across tests.
+
+    Some tests temporarily inject submodule entries like 'pycardano.HDWallet' into
+    sys.modules. That can interfere with other tests that import symbols with
+    'from pycardano import HDWallet'. Before each test, reset sys.modules to point
+    back to our consistent mocks and remove any stray submodule entries.
+    """
+    import sys
+
+    # Remove any polluted submodule entries so attribute imports work as expected
+    for polluted in [
+        'pycardano.HDWallet',
+        'pycardano.PaymentVerificationKey',
+        'pycardano.Address',
+        'pycardano.Network',
+    ]:
+        if polluted in sys.modules:
+            del sys.modules[polluted]
+
+    # Reassert our top-level mocked modules
+    sys.modules['pycardano'] = mock_pycardano
+    sys.modules['pycardano.key'] = mock_pycardano.key
+    sys.modules['bitcoinlib'] = mock_bitcoinlib
+    sys.modules['bitcoinlib.keys'] = mock_bitcoinlib.keys
+    sys.modules['base58'] = mock_base58
+    sys.modules['mnemonic'] = mock_mnemonic_module
+
+    # Reset and reconfigure Bitcoin HDKey mock
+    mock_bitcoin_hdkey.subkey_for_path = Mock(side_effect=mock_subkey_for_path)
+    mock_hdkey_class.from_seed = Mock(side_effect=mock_hdkey_from_seed)
+
+    # Reset and reconfigure Cardano HDWallet mock
+    mock_hdwallet.derive_from_path = Mock(side_effect=mock_derive_from_path)
+    mock_hdwallet_class.from_mnemonic = Mock(side_effect=mock_hdwallet_from_mnemonic)
+
+    # Ensure the derived key has proper public_key
+    mock_derived_key.public_key = mock_public_key
+
+    # Ensure attributes are present on pycardano mock
+    mock_pycardano.HDWallet = mock_hdwallet_class
+
+    yield
+
 @pytest.fixture
 def mock_security_manager():
     """Provide a mocked SecurityManager that doesn't show popups"""
@@ -277,4 +347,4 @@ def mock_security_manager():
     return mock_manager
 
 # Print confirmation that popup prevention is active
-print("✅ Global GUI popup prevention activated for all tests")
+print("Global GUI popup prevention activated for all tests")
