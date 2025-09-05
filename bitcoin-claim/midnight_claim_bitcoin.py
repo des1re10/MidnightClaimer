@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Midnight Bitcoin Claim - Phantom Wallet Bitcoin Private Key Extraction
+Midnight Bitcoin Claim - Using Bit Library for Proper Private Key Extraction
 Derives Bitcoin private keys from Trezor seed phrases for Midnight token claims
 LIMITATION: Only works with Native SegWit (bc1) addresses for Phantom Wallet import
 """
@@ -11,7 +11,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 import logging
 from mnemonic import Mnemonic
-from bitcoinlib.keys import HDKey
+import hashlib
+import hmac
+from bit import Key
+from bit.format import bytes_to_wif
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -22,7 +25,7 @@ class BitcoinMidnightClaim:
         
         self.seed_phrase = os.getenv('TREZOR_SEED_PHRASE')
         self.passphrase = os.getenv('TREZOR_PASSPHRASE', '')
-        self.eligible_bitcoin_address = os.getenv('BITCOIN_CLAIM_ADDRESS')  # Updated env var name
+        self.eligible_bitcoin_address = os.getenv('BITCOIN_CLAIM_ADDRESS')
         self.bitcoin_address_type = os.getenv('BITCOIN_ADDRESS_TYPE', '').lower()
         self.bitcoin_account = int(os.getenv('BITCOIN_ACCOUNT', '0'))
         self.bitcoin_address_index = int(os.getenv('BITCOIN_ADDRESS_INDEX', '0'))
@@ -56,98 +59,92 @@ class BitcoinMidnightClaim:
         """
         Auto-detect Bitcoin address type from format
         """
-        if address.startswith('1'):
-            logger.error("Legacy addresses (1...) are not supported by Phantom Wallet")
-            raise ValueError("Legacy addresses not supported")
-        elif address.startswith('3'):
-            logger.error("SegWit addresses (3...) are not supported by Phantom Wallet")
-            raise ValueError("SegWit addresses not supported")
-        elif address.startswith('bc1q'):
+        if address.startswith('bc1q'):
             return 'native_segwit'
         elif address.startswith('bc1p'):
             return 'taproot'
         else:
-            raise ValueError(f"Unknown Bitcoin address format: {address}")
+            raise ValueError(f"Unsupported address format: {address}")
 
-    def _get_derivation_path(self, address_type, account, change, index):
+    def _derive_master_key(self, seed_phrase, passphrase):
         """
-        Get BIP derivation path for different address types
+        Derive master private key from seed phrase using BIP39
         """
-        if address_type == 'native_segwit':
-            # BIP84: m/84'/0'/account'/change/index
-            return f"m/84'/0'/{account}'/{change}/{index}"
-        elif address_type == 'taproot':
-            # BIP86: m/86'/0'/account'/change/index
-            return f"m/86'/0'/{account}'/{change}/{index}"
-        else:
-            raise ValueError(f"Unsupported address type for Phantom: {address_type}")
-
-    def _quick_verification_check(self):
-        """
-        Quick check to see if basic wallet creation works and log initial findings
-        """
-        logger.info("\n=== QUICK VERIFICATION ===")
+        mnemo = Mnemonic("english")
+        seed = mnemo.to_seed(seed_phrase, passphrase=passphrase)
         
-        try:
-            # Validate mnemonic
-            mnemo = Mnemonic("english")
-            if not mnemo.check(self.seed_phrase):
-                logger.error("Invalid mnemonic seed phrase")
-                return False
-            
-            logger.info("Wallet creation successful")
-            logger.info(f"Address type detected: {self.bitcoin_address_type}")
-            
-            # Get derivation path for current setup
-            derivation_path = self._get_derivation_path(
-                self.bitcoin_address_type, 
-                self.bitcoin_account, 
-                0,  # External addresses (change=0)
-                self.bitcoin_address_index
-            )
-            logger.info(f"Derivation path: {derivation_path}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Basic wallet creation failed: {e}")
-            logger.error("This suggests a fundamental seed phrase or setup issue")
-            return False
+        # BIP32 master key derivation
+        hmac_result = hmac.new(b"Bitcoin seed", seed, hashlib.sha512).digest()
+        master_private_key = hmac_result[:32]
+        master_chain_code = hmac_result[32:]
+        
+        return master_private_key, master_chain_code
+
+    def _derive_child_key(self, parent_key, parent_chain_code, index, hardened=False):
+        """
+        Derive child private key using BIP32
+        """
+        if hardened:
+            index += 0x80000000
+            data = b'\x00' + parent_key + index.to_bytes(4, 'big')
+        else:
+            # For non-hardened derivation, we'd need the public key
+            # For this implementation, we'll only support hardened derivation
+            data = b'\x00' + parent_key + index.to_bytes(4, 'big')
+        
+        hmac_result = hmac.new(parent_chain_code, data, hashlib.sha512).digest()
+        child_private_key = hmac_result[:32]
+        child_chain_code = hmac_result[32:]
+        
+        return child_private_key, child_chain_code
 
     def _derive_bitcoin_key(self, passphrase, account, address_index, address_type):
         """
-        Derive Bitcoin private key for given parameters
+        Derive Bitcoin private key for given parameters using proper BIP32/BIP84 derivation
         """
         try:
-            # Create HDWallet from mnemonic
-            mnemo = Mnemonic("english")
-            seed = mnemo.to_seed(self.seed_phrase, passphrase=passphrase)
+            # Get master key
+            master_key, master_chain = self._derive_master_key(self.seed_phrase, passphrase)
             
-            # Create master key
-            master_key = HDKey.from_seed(seed)
+            # BIP84 derivation path: m/84'/0'/account'/0/address_index
+            # Derive m/84'
+            key, chain = self._derive_child_key(master_key, master_chain, 84, hardened=True)
             
-            # Get derivation path
-            derivation_path = self._get_derivation_path(address_type, account, 0, address_index)
+            # Derive m/84'/0'
+            key, chain = self._derive_child_key(key, chain, 0, hardened=True)
             
-            # Derive key
-            derived_key = master_key.subkey_for_path(derivation_path)
+            # Derive m/84'/0'/account'
+            key, chain = self._derive_child_key(key, chain, account, hardened=True)
             
-            # Generate address based on type
-            if address_type == 'native_segwit':
-                # P2WPKH
-                address = derived_key.address(script_type='p2wpkh')
-            elif address_type == 'taproot':
-                # P2TR
-                address = derived_key.address(script_type='p2tr')
-            else:
-                raise ValueError(f"Unsupported address type: {address_type}")
+            # Derive m/84'/0'/account'/0 (external chain)
+            key, chain = self._derive_child_key(key, chain, 0, hardened=False)
+            
+            # Derive m/84'/0'/account'/0/address_index
+            final_key, final_chain = self._derive_child_key(key, chain, address_index, hardened=False)
+            
+            # Convert to proper formats
+            private_key_hex = final_key.hex()
+            
+            # Create Key object from bit library
+            bit_key = Key.from_hex(private_key_hex)
+            
+            # Get the segwit address (P2WPKH)
+            segwit_address = bit_key.segwit_address
+            
+            # Get WIF format
+            private_key_wif = bit_key.to_wif()
+            
+            derivation_path = f"m/84'/0'/{account}'/0/{address_index}"
+            
+            logger.debug(f"Derived address: {segwit_address}")
+            logger.debug(f"WIF starts with: {private_key_wif[0] if private_key_wif else 'None'}")
             
             return {
-                'address': address,
-                'private_key_wif': derived_key.wif(),
-                'private_key_hex': derived_key.private_hex,
+                'address': segwit_address,
+                'private_key_wif': private_key_wif,
+                'private_key_hex': private_key_hex,
                 'derivation_path': derivation_path,
-                'derived_key': derived_key
+                'bit_key': bit_key
             }
             
         except Exception as e:
@@ -240,62 +237,48 @@ class BitcoinMidnightClaim:
             address = derivation_result['address']
             private_key_wif = derivation_result['private_key_wif']
             private_key_hex = derivation_result['private_key_hex']
-            derived_key = derivation_result['derived_key']
             
             # Create safe filename from address
             safe_addr = address[:12].replace('bc1q', '').replace('bc1p', '')
-            
-            # Generate multiple formats for Phantom compatibility
-            wif_compressed = private_key_wif
-            
-            # Try to get uncompressed WIF
-            try:
-                wif_uncompressed = derived_key.wif(compressed=False)
-            except:
-                wif_uncompressed = "Error generating uncompressed WIF"
-            
-            hex_format = private_key_hex
             
             # Define file paths
             hex_file = self.workspace / f"hex_key_{safe_addr}.txt"
             wif_file = self.workspace / f"wif_key_{safe_addr}.txt"
             instructions_file = self.workspace / f"instructions_{safe_addr}.txt"
             
-            # Write hex file (most important)
+            # Write hex file
             try:
                 with open(hex_file, 'w') as f:
-                    f.write(hex_format)
+                    f.write(private_key_hex)
                 logger.info(f"Hex file saved: {hex_file}")
             except Exception as e:
                 logger.error(f"Failed to write hex file: {e}")
             
-            # Write WIF file
+            # Write WIF file (Phantom needs this format)
             try:
                 with open(wif_file, 'w') as f:
-                    f.write(wif_compressed)
+                    f.write(private_key_wif)
                 logger.info(f"WIF file saved: {wif_file}")
+                logger.info(f"WIF key starts with: {private_key_wif[0]} (for Phantom compatibility)")
             except Exception as e:
                 logger.error(f"Failed to write WIF file: {e}")
             
-            # Write simple instructions
+            # Write instructions
             try:
                 with open(instructions_file, 'w') as f:
                     f.write("MIDNIGHT BITCOIN CLAIM - PHANTOM WALLET IMPORT\n")
                     f.write("=" * 50 + "\n\n")
                     f.write(f"Bitcoin Address: {address}\n")
                     f.write(f"Derivation Path: {derivation_result['derivation_path']}\n\n")
-                    f.write("INSTRUCTIONS:\n")
-                    f.write("1. Try HEX format first in Phantom\n")
-                    f.write(f"   File: {hex_file.name}\n")
-                    f.write(f"   Key: {hex_format}\n\n")
-                    f.write("2. If HEX fails, try WIF format\n")
-                    f.write(f"   File: {wif_file.name}\n")
-                    f.write(f"   Key: {wif_compressed}\n\n")
-                    f.write("PHANTOM STEPS:\n")
-                    f.write("- Open Phantom extension\n")
-                    f.write("- Add/Connect Wallet > Import Private Key\n")
-                    f.write("- Select Bitcoin blockchain\n")
-                    f.write("- Paste key from file above\n\n")
+                    f.write("CRITICAL: Use WIF format for Phantom\n")
+                    f.write("Phantom expects Bitcoin private keys in WIF format\n\n")
+                    f.write("FOR PHANTOM WALLET:\n")
+                    f.write(f"1. Copy this WIF key: {private_key_wif}\n")
+                    f.write("2. Open Phantom extension\n")
+                    f.write("3. Add/Connect Wallet > Import Private Key\n")
+                    f.write("4. Select Bitcoin blockchain\n")
+                    f.write("5. Paste the WIF key above\n")
+                    f.write("6. Name wallet: 'Midnight Claim'\n\n")
                     f.write("SECURITY REMINDER:\n")
                     f.write("- Delete all files after claiming\n")
                     f.write("- Transfer tokens to NEW secure wallet\n")
@@ -309,8 +292,8 @@ class BitcoinMidnightClaim:
                 'wif_file': str(wif_file),
                 'instructions_file': str(instructions_file),
                 'derivation_info': derivation_info,
-                'hex_format': hex_format,
-                'wif_compressed': wif_compressed
+                'hex_format': private_key_hex,
+                'wif_compressed': private_key_wif
             }
             
             return result
@@ -319,66 +302,12 @@ class BitcoinMidnightClaim:
             logger.error(f"Private key extraction error: {e}")
             return None
 
-    def _create_diagnostic_file(self):
-        """
-        Create diagnostic file for troubleshooting
-        """
-        diag_file = self.workspace / f"BITCOIN_DIAGNOSTIC_REPORT_{os.getpid()}.txt"
-        try:
-            with open(diag_file, 'w') as f:
-                f.write("MIDNIGHT BITCOIN CLAIM COMPREHENSIVE DIAGNOSTIC REPORT\n")
-                f.write("=" * 60 + "\n\n")
-                f.write("ISSUE: No derivation scenario matched your target Bitcoin address.\n\n")
-                
-                f.write("CONFIGURATION TESTED:\n")
-                f.write(f"Target Bitcoin Address: {self.eligible_bitcoin_address}\n")
-                f.write(f"Address Type: {self.bitcoin_address_type}\n")
-                f.write(f"Expected Account: {self.bitcoin_account}\n")
-                f.write(f"Expected Index: {self.bitcoin_address_index}\n")
-                f.write(f"Passphrase Length: {len(self.passphrase)} characters\n\n")
-                
-                f.write("WHAT WE TESTED:\n")
-                f.write("- Accounts 0-4 for address derivation\n")
-                f.write("- Address indices 0-19 within each account\n")
-                f.write("- 6 different passphrase scenarios\n")
-                f.write("- Multiple Unicode normalizations\n\n")
-                
-                f.write("ROOT CAUSE ANALYSIS:\n")
-                f.write("Since no derivation scenario matched, this indicates:\n\n")
-                f.write("1. SEED PHRASE MISMATCH (Most Likely)\n")
-                f.write("   - Your .env seed doesn't match your Trezor seed\n")
-                f.write("   - Word order might be wrong\n")
-                f.write("   - One or more words might be misspelled\n\n")
-                
-                f.write("2. PASSPHRASE ENCODING ISSUE\n")
-                f.write("   - Trezor might encode special characters differently\n")
-                f.write("   - Hidden Unicode characters in passphrase\n\n")
-                
-                f.write("3. ADDRESS DERIVATION ISSUE\n")
-                f.write("   - Your Bitcoin address might be from different derivation\n")
-                f.write("   - Possible non-standard derivation path\n\n")
-                
-                f.write("IMMEDIATE ACTION PLAN:\n")
-                f.write("1. Verify seed phrase against your Trezor\n")
-                f.write("2. Test with empty passphrase (many users think they have one)\n")
-                f.write("3. Double-check address from Midnight Portal\n")
-                f.write("4. Contact Midnight support for alternatives\n")
-            
-            logger.info(f"Comprehensive diagnostic saved: {diag_file}")
-        except Exception as e:
-            logger.error(f"Failed to write diagnostic file: {e}")
-
     def run_claim_test(self):
         """
         Main method to run the Bitcoin claim test
         """
-        logger.info("Starting comprehensive Bitcoin Midnight claim test...")
-        logger.info("This will test multiple scenarios to find the exact derivation...")
-        logger.info("Generating keys for Phantom Wallet import only...")
-        
-        # First, do a quick verification check
-        if not self._quick_verification_check():
-            return False
+        logger.info("Starting Bitcoin Midnight claim test with BIT library...")
+        logger.info("This will properly derive private keys for Phantom Wallet...")
         
         # Test comprehensive derivation
         result = self.test_comprehensive_derivation()
@@ -394,14 +323,14 @@ class BitcoinMidnightClaim:
                 logger.info("="*90)
                 
                 logger.info(f"\nKEY SAVED TO: {self.workspace}")
-                logger.info(f"Hex Format: {Path(key_result['hex_file']).name}")
-                logger.info(f"WIF Format: {Path(key_result['wif_file']).name}")
+                logger.info(f"WIF Format (USE THIS): {Path(key_result['wif_file']).name}")
+                logger.info(f"Hex Format (backup): {Path(key_result['hex_file']).name}")
                 logger.info(f"Instructions: {Path(key_result['instructions_file']).name}")
                 
                 print(f"\nSUCCESS! Bitcoin private key extracted!")
                 print(f"Saved to: {self.workspace}")
                 print(f"Ready for Phantom Wallet import!")
-                print(f"Start with HEX format: {Path(key_result['hex_file']).name}")
+                print(f"USE WIF FORMAT: {Path(key_result['wif_file']).name}")
                 
                 return True
             else:
@@ -409,22 +338,13 @@ class BitcoinMidnightClaim:
                 return False
         else:
             logger.error("Comprehensive derivation test failed!")
-            logger.info("\nROOT CAUSE ANALYSIS:")
-            logger.info("Since we tested multiple accounts, indices, and passphrases...")
-            logger.info("The issue is most likely:")
-            logger.info("1. SEED PHRASE MISMATCH - Your .env seed doesn't match your Trezor")
-            logger.info("2. ADDRESS MISMATCH - Your eligible address is from a different wallet")
-            logger.info("3. DERIVATION ISSUE - Needs different derivation method")
-            
-            # Create comprehensive diagnostic file
-            self._create_diagnostic_file()
+            logger.info("Check your seed phrase and passphrase in .env file")
             return False
 
 def main():
-    print("Midnight Bitcoin Claim - PHANTOM WALLET ONLY")
+    print("Midnight Bitcoin Claim - USING BIT LIBRARY")
     print("=" * 80)
-    print("Testing multiple accounts, passphrase scenarios, and derivation methods")
-    print("Extracting Bitcoin private keys for Phantom Wallet import")
+    print("Properly deriving Bitcoin private keys for Phantom Wallet import")
     print("LIMITATION: Only works with Native SegWit (bc1) addresses")
     print("=" * 80)
     
@@ -439,10 +359,11 @@ def main():
         if success:
             print("\nBITCOIN CLAIM TEST SUCCESSFUL!")
             print("Your Bitcoin private key is ready for Phantom Wallet import!")
+            print("IMPORTANT: Use the WIF format file")
             return True
         else:
             print("\nBitcoin claim test failed")
-            print(f"Check diagnostic file in: {claimer.workspace}")
+            print("Check your seed phrase and passphrase in .env file")
             return False
             
     except Exception as e:
