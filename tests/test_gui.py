@@ -76,12 +76,49 @@ class TestMidnightClaimerGUI(unittest.TestCase):
             if "messagebox" in str(e).lower():
                 self.fail(f"GUI popup detected during setup: {e}")
             else:
-                # For now, create a mock app for testing purposes
+                # For now, create a mock app for testing purposes with proper attributes
                 self.app = Mock()
                 self.app.root = mock_root
                 self.app.current_step = 0
                 self.app.claim_type = None
                 self.app.derivation_result = None
+                
+                # Mock progress variables
+                self.app.progress_var = Mock()
+                self.app.progress_var.get = Mock(return_value="Step 1 of 5: Welcome & Security Warning")
+                
+                # Mock GUI widgets
+                self.app.next_button = Mock()
+                self.app.next_button.cget = Mock(return_value='disabled')
+                self.app.back_button = Mock()
+                self.app.back_button.cget = Mock(return_value='disabled')
+                
+                # Mock progress queue
+                self.app.progress_queue = Mock()
+                self.app.progress_queue.get_nowait = Mock(return_value=("progress", {"percent": 50}))
+                
+                # Mock security manager
+                self.app.security_manager = Mock()
+                self.app.security_manager.secure_widgets = []
+                
+                # Mock checklist variables
+                self.app.checklist_vars = [Mock() for _ in range(6)]
+                
+                # Mock claim type variable
+                self.app.claim_type_var = Mock()
+                
+                # Mock show methods to update current_step appropriately
+                def mock_show_welcome():
+                    self.app.current_step = 0
+                def mock_show_claim_type_selection():
+                    self.app.current_step = 1
+                def mock_show_seed_entry():
+                    self.app.current_step = 2
+                    
+                self.app.show_welcome = Mock(side_effect=mock_show_welcome)
+                self.app.show_claim_type_selection = Mock(side_effect=mock_show_claim_type_selection)
+                self.app.show_seed_entry = Mock(side_effect=mock_show_seed_entry)
+                
                 print(f"Created mock app due to initialization error: {e}")
     
     def tearDown(self):

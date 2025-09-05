@@ -30,7 +30,11 @@ class TestCardanoService(unittest.TestCase):
     """Tests for CardanoService"""
     
     def setUp(self):
-        self.service = CardanoService()
+        with patch('Src.services.cardano_service.Mnemonic') as mock_mnemonic_class:
+            # Use the same mock instance from conftest.py
+            from mnemonic import Mnemonic
+            mock_mnemonic_class.return_value = Mnemonic("english")
+            self.service = CardanoService()
     
     def test_detect_address_type(self):
         """Test address type detection"""
@@ -49,8 +53,12 @@ class TestCardanoService(unittest.TestCase):
     
     def test_validate_seed_phrase(self):
         """Test seed phrase validation - uses global mnemonic mock from conftest.py"""
+        # Ensure the service uses the mocked mnemonic
+        from mnemonic import Mnemonic
+        self.service.mnemo = Mnemonic("english")
+        
         # Test valid seed phrase (mock returns True by default for valid phrases)
-        self.assertTrue(self.service.validate_seed_phrase("valid seed phrase"))
+        self.assertTrue(self.service.validate_seed_phrase("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"))
         
         # Test invalid seed phrase (mock returns False for phrases with 'invalid')
         self.assertFalse(self.service.validate_seed_phrase("invalid seed"))
@@ -94,8 +102,9 @@ class TestCardanoService(unittest.TestCase):
             with patch('Src.services.cardano_service.ExtendedSigningKey') as mock_esk:
                 mock_payment_key = Mock()
                 mock_stake_key = Mock()
-                mock_payment_key.to_json.return_value = '{"payment": "key"}'
-                mock_stake_key.to_json.return_value = '{"stake": "key"}'
+                # Return proper JSON strings
+                mock_payment_key.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
+                mock_stake_key.to_json.return_value = '{"type": "StakeExtendedSigningKeyShelley_ed25519", "description": "Stake Signing Key", "cborHex": "5880123456"}'
                 
                 mock_esk.from_hdwallet.side_effect = [mock_payment_key, mock_stake_key]
                 
@@ -109,7 +118,11 @@ class TestBitcoinService(unittest.TestCase):
     """Tests for BitcoinService"""
     
     def setUp(self):
-        self.service = BitcoinService()
+        with patch('Src.services.bitcoin_service.Mnemonic') as mock_mnemonic_class:
+            # Use the same mock instance from conftest.py
+            from mnemonic import Mnemonic
+            mock_mnemonic_class.return_value = Mnemonic("english")
+            self.service = BitcoinService()
     
     def test_detect_address_type(self):
         """Test Bitcoin address type detection"""
@@ -140,8 +153,12 @@ class TestBitcoinService(unittest.TestCase):
     
     def test_validate_seed_phrase(self):
         """Test seed phrase validation - uses global mnemonic mock from conftest.py"""
+        # Ensure the service uses the mocked mnemonic
+        from mnemonic import Mnemonic
+        self.service.mnemo = Mnemonic("english")
+        
         # Test valid seed phrase (mock returns True by default for valid phrases)
-        self.assertTrue(self.service.validate_seed_phrase("valid seed phrase"))
+        self.assertTrue(self.service.validate_seed_phrase("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"))
         
         # Test invalid seed phrase (mock returns False for phrases with 'invalid')
         self.assertFalse(self.service.validate_seed_phrase("invalid seed"))
