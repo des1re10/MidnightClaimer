@@ -7,6 +7,7 @@ Tests core validation logic independently
 import pytest
 import re
 from pathlib import Path
+from unittest.mock import patch, Mock
 
 
 def validate_seed_phrase_format(seed_phrase: str) -> tuple[bool, str]:

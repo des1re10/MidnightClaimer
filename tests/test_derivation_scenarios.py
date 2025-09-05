@@ -7,11 +7,13 @@ These tests use real cryptographic libraries with test data (NOT production keys
 import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import sys
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / 'Src'))
+
+# GUI popup prevention is handled globally by conftest.py
 
 from services.cardano_service import CardanoService
 from services.bitcoin_service import BitcoinService
