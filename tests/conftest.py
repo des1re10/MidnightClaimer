@@ -68,11 +68,30 @@ sys.modules['tkinter.scrolledtext'] = mock_scrolledtext
 # Mock crypto libraries to allow tests to run without actual crypto dependencies
 mock_pycardano = MagicMock()
 mock_pycardano.key = MagicMock()
-mock_pycardano.key.ExtendedSigningKey = MagicMock()
+
+# Create proper ExtendedSigningKey mock that returns JSON strings
+mock_extended_signing_key_class = MagicMock()
+mock_payment_key = MagicMock()
+mock_stake_key = MagicMock()
+mock_payment_key.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
+mock_stake_key.to_json.return_value = '{"type": "StakeExtendedSigningKeyShelley_ed25519", "description": "Stake Signing Key", "cborHex": "5880123456"}'
+
+# Configure the class mock to return appropriate instances
+def mock_from_hdwallet(wallet):
+    # Create a new mock instance each time that returns a proper string
+    mock_instance = Mock()
+    mock_instance.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
+    return mock_instance
+
+mock_extended_signing_key_class.from_hdwallet.side_effect = mock_from_hdwallet
+mock_pycardano.key.ExtendedSigningKey = mock_extended_signing_key_class
 
 # Create mock HDWallet for Cardano tests
 mock_derived_key = MagicMock()
-mock_derived_key.public_key = b'test_public_key_32_bytes_long_abc'  # 32 bytes
+# Set public_key as bytes with proper length support
+test_public_key = b'test_public_key_32_bytes_long_abc'  # 32 bytes
+mock_derived_key.public_key = test_public_key
+# Ensure the derived key itself also has length support
 mock_derived_key.__len__ = Mock(return_value=32)
 
 mock_hdwallet = MagicMock()
@@ -89,23 +108,31 @@ mock_bitcoin_hdkey = MagicMock()
 mock_bitcoin_hdkey.address = Mock(return_value="1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")
 # Make the address() callable return the address string directly
 mock_bitcoin_hdkey.address = lambda: "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
+# Add WIF key generation
+mock_bitcoin_hdkey.wif = lambda: "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ"
 
 mock_bitcoinlib.keys.HDKey = MagicMock()
 mock_bitcoinlib.keys.HDKey.from_seed = Mock(return_value=mock_bitcoin_hdkey)
 mock_bitcoin_hdkey.subkey_for_path = Mock(return_value=mock_bitcoin_hdkey)
 
-# Mock base58 for address validation
+# Mock base58 for address and WIF validation
 mock_base58 = MagicMock()
-def mock_b58decode_check(address):
-    """Mock base58 decode that validates reasonable Bitcoin addresses"""
-    if address.startswith('1') and len(address) >= 25:
+def mock_b58decode_check(data):
+    """Mock base58 decode that validates Bitcoin addresses and WIF keys"""
+    # Bitcoin addresses
+    if data.startswith('1') and len(data) >= 25:
         return b'\x00' + b'0' * 20  # P2PKH format
-    elif address.startswith('3') and len(address) >= 25:
+    elif data.startswith('3') and len(data) >= 25:
         return b'\x05' + b'0' * 20  # P2SH format
-    elif address.startswith('bc1') and len(address) >= 14:
+    elif data.startswith('bc1') and len(data) >= 14:
         return b'0' * 22  # Bech32 format
+    # WIF private keys
+    elif data.startswith('5') and len(data) == 51:
+        return b'\x80' + b'0' * 32  # Uncompressed WIF
+    elif (data.startswith('K') or data.startswith('L')) and len(data) == 52:
+        return b'\x80' + b'0' * 32 + b'\x01'  # Compressed WIF
     else:
-        raise ValueError("Invalid address")
+        raise ValueError("Invalid data")
 
 mock_base58.b58decode_check = Mock(side_effect=mock_b58decode_check)
 

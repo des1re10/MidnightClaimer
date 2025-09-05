@@ -93,8 +93,12 @@ class SecureText(tk.Text):
         """Update secure content"""
         self._secure_content = super().get("1.0", tk.END).strip()
     
-    def get(self, start, end=None):
+    def get(self, start=None, end=None):
         """Override get to return secure content when requested"""
+        # If no parameters provided, return all secure content (Entry-like behavior)
+        if start is None:
+            return self._secure_content
+        # If start is "1.0" and end is None or END, return secure content
         if start == "1.0" and (end is None or end == tk.END):
             return self._secure_content
         return super().get(start, end)

@@ -98,21 +98,19 @@ class TestCardanoService(unittest.TestCase):
                 'address_type': 'payment_stake'
             }
             
-            # Mock ExtendedSigningKey
+            # Patch ExtendedSigningKey using the full module path as imported
             with patch('Src.services.cardano_service.ExtendedSigningKey') as mock_esk:
-                mock_payment_key = Mock()
-                mock_stake_key = Mock()
-                # Return proper JSON strings
-                mock_payment_key.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
-                mock_stake_key.to_json.return_value = '{"type": "StakeExtendedSigningKeyShelley_ed25519", "description": "Stake Signing Key", "cborHex": "5880123456"}'
-                
-                mock_esk.from_hdwallet.side_effect = [mock_payment_key, mock_stake_key]
+                # Create properly configured mock instance
+                mock_key_instance = Mock()
+                mock_key_instance.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
+                # Configure the class method to return our mock instance
+                mock_esk.from_hdwallet.return_value = mock_key_instance
                 
                 result = self.service.extract_keys(derivation_info, output_dir)
-                
-                self.assertIn('payment_key_file', result)
-                self.assertIn('stake_key_file', result)
-                self.assertEqual(result['address'], 'addr1test123456')
+            
+            self.assertIn('payment_key_file', result)
+            self.assertIn('stake_key_file', result)
+            self.assertEqual(result['address'], valid_address)
 
 class TestBitcoinService(unittest.TestCase):
     """Tests for BitcoinService"""
