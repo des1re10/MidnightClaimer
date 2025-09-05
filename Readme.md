@@ -16,23 +16,32 @@ This tool helps Trezor users extract the correct private keys needed to claim Mi
 
 ## 🔒 Recommended Security Strategy
 
-**IMPORTANT: This method requires exposing your seed phrase, so follow this approach:**
+**CRITICAL: This method requires exposing your seed phrase, so follow this approach:**
 
 ### Before Starting:
-1. **Create a NEW Trezor wallet** (generate new seed)
+1. **Create a NEW Trezor wallet** (generate new seed) 
 2. **Transfer ALL funds** from your old wallet to the new wallet
 3. **Keep your OLD wallet** for this claim process only
 4. **Use your OLD eligible address** in the script (the one with Midnight claim rights)
 
+### **🚨 CRITICAL: Where to Send Claimed Tokens**
+- **NEVER use addresses from your OLD wallet for receiving claimed tokens**
+- **ALWAYS use a fresh address from your NEW secure wallet**
+- **The OLD wallet is compromised once you expose its seed phrase**
+- **Any tokens sent to OLD wallet addresses are at risk**
+
 ### Why This Approach:
 - ✅ Your funds are safe in the NEW wallet
-- ✅ Your OLD wallet seed is only used for claiming
-- ✅ If anything goes wrong, your funds are protected
-- ✅ You can abandon the OLD wallet after claiming
+- ✅ Your OLD wallet seed is only used for claiming authorization
+- ✅ Claimed tokens go directly to your secure NEW wallet
+- ✅ If anything goes wrong during claiming, your funds are protected
+- ✅ You can abandon the OLD wallet completely after claiming
 
 ### After Claiming:
-- Transfer claimed Midnight tokens to your NEW secure wallet
+- **Claimed tokens should already be in your NEW secure wallet**
+- **Double-check you used NEW wallet address for receiving**
 - Abandon the OLD wallet completely
+- Delete all exposed seed phrase materials
 
 ## 🎯 What This Solves
 
