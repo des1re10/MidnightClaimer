@@ -98,13 +98,16 @@ TREZOR_SEED_PHRASE=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 
 # Replace with your actual passphrase (or leave empty if none)
 TREZOR_PASSPHRASE=YourActualPassphrase
 
-# Replace with your claim address from Midnight Portal
+# Replace with your eligible ADA address (the one with Midnight claim rights)
+# See: "How to Get Required Information" section below
 CLAIM_ADDRESS=addr1qxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# Standard Trezor derivation path
+# Standard Trezor derivation path (Account 0 most common)
+# See: "How to Get Required Information" section below for other accounts
 PAYMENT_PATH=m/1852'/1815'/0'/0/0
 
-# Replace with your actual stake key checksum
+# Replace with your actual stake key checksum (64 hex characters)
+# See: "How to Get Required Information" section below
 STAKE_CHECKSUM=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 ```
 
