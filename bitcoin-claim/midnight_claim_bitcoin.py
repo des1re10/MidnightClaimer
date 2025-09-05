@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Midnight Bitcoin Claim - Comprehensive Bitcoin Private Key Extraction
+Midnight Bitcoin Claim - Phantom Wallet Bitcoin Private Key Extraction
 Derives Bitcoin private keys from Trezor seed phrases for Midnight token claims
-Supports all address types: Legacy (P2PKH), SegWit (P2SH-P2WPKH), Native SegWit (P2WPKH)
+LIMITATION: Only works with Native SegWit (bc1) addresses for Phantom Wallet import
 """
 
 import os
@@ -26,13 +26,20 @@ class BitcoinMidnightClaim:
         
         self.seed_phrase = os.getenv('TREZOR_SEED_PHRASE')
         self.passphrase = os.getenv('TREZOR_PASSPHRASE', '')
-        self.eligible_bitcoin_address = os.getenv('ELIGIBLE_BITCOIN_ADDRESS')
+        self.eligible_bitcoin_address = os.getenv('BITCOIN_CLAIM_ADDRESS')  # Updated env var name
         self.bitcoin_address_type = os.getenv('BITCOIN_ADDRESS_TYPE', '').lower()
         self.bitcoin_account = int(os.getenv('BITCOIN_ACCOUNT', '0'))
         self.bitcoin_address_index = int(os.getenv('BITCOIN_ADDRESS_INDEX', '0'))
         
         if not all([self.seed_phrase, self.eligible_bitcoin_address]):
-            raise ValueError("TREZOR_SEED_PHRASE and ELIGIBLE_BITCOIN_ADDRESS are required")
+            raise ValueError("TREZOR_SEED_PHRASE and BITCOIN_CLAIM_ADDRESS are required")
+        
+        # Critical compatibility check
+        if not self.eligible_bitcoin_address.startswith('bc1'):
+            logger.error("🚨 CRITICAL: This process only works with Native SegWit addresses (bc1)")
+            logger.error(f"Your address starts with: {self.eligible_bitcoin_address[:3]}")
+            logger.error("Contact Midnight support for alternative claiming methods")
+            raise ValueError("Unsupported address type - only bc1 addresses supported")
             
         logger.info(f"Target Bitcoin address: {self.eligible_bitcoin_address}")
         logger.info(f"Address type override: {self.bitcoin_address_type or 'auto-detect'}")
@@ -54,11 +61,15 @@ class BitcoinMidnightClaim:
         Auto-detect Bitcoin address type from format
         """
         if address.startswith('1'):
-            return 'legacy'
+            logger.error("Legacy addresses (1...) are not supported by Phantom Wallet")
+            raise ValueError("Legacy addresses not supported")
         elif address.startswith('3'):
-            return 'segwit'
-        elif address.startswith('bc1'):
+            logger.error("SegWit addresses (3...) are not supported by Phantom Wallet")
+            raise ValueError("SegWit addresses not supported")
+        elif address.startswith('bc1q'):
             return 'native_segwit'
+        elif address.startswith('bc1p'):
+            return 'taproot'
         else:
             raise ValueError(f"Unknown Bitcoin address format: {address}")
 
@@ -66,17 +77,14 @@ class BitcoinMidnightClaim:
         """
         Get BIP derivation path for different address types
         """
-        if address_type == 'legacy':
-            # BIP44: m/44'/0'/account'/change/index
-            return f"m/44'/0'/{account}'/{change}/{index}"
-        elif address_type == 'segwit':
-            # BIP49: m/49'/0'/account'/change/index
-            return f"m/49'/0'/{account}'/{change}/{index}"
-        elif address_type == 'native_segwit':
+        if address_type == 'native_segwit':
             # BIP84: m/84'/0'/account'/change/index
             return f"m/84'/0'/{account}'/{change}/{index}"
+        elif address_type == 'taproot':
+            # BIP86: m/86'/0'/account'/change/index
+            return f"m/86'/0'/{account}'/{change}/{index}"
         else:
-            raise ValueError(f"Unsupported address type: {address_type}")
+            raise ValueError(f"Unsupported address type for Phantom: {address_type}")
 
     def _quick_verification_check(self):
         """
@@ -129,15 +137,12 @@ class BitcoinMidnightClaim:
             derived_key = master_key.subkey_for_path(derivation_path)
             
             # Generate address based on type
-            if address_type == 'legacy':
-                # P2PKH
-                address = derived_key.address()
-            elif address_type == 'segwit':
-                # P2SH-P2WPKH
-                address = derived_key.address(script_type='p2sh_p2wpkh')
-            elif address_type == 'native_segwit':
+            if address_type == 'native_segwit':
                 # P2WPKH
                 address = derived_key.address(script_type='p2wpkh')
+            elif address_type == 'taproot':
+                # P2TR
+                address = derived_key.address(script_type='p2tr')
             else:
                 raise ValueError(f"Unsupported address type: {address_type}")
             
@@ -230,9 +235,9 @@ class BitcoinMidnightClaim:
 
     def extract_private_key(self, derivation_info):
         """
-        Extract and save the Bitcoin private key in WIF format
+        Extract and save the Bitcoin private key in WIF format for Phantom Wallet import
         """
-        logger.info("Extracting Bitcoin private key...")
+        logger.info("Extracting Bitcoin private key for Phantom Wallet...")
         
         try:
             derivation_result = derivation_info['derivation_result']
@@ -240,15 +245,15 @@ class BitcoinMidnightClaim:
             private_key_wif = derivation_result['private_key_wif']
             
             # Create safe filename from address
-            safe_addr = address[:12].replace('1', '').replace('3', '').replace('bc1q', 'bc1q')
+            safe_addr = address[:12].replace('bc1q', 'bc1q').replace('bc1p', 'bc1p')
             
             # Save WIF private key
-            wif_file = self.workspace / f"midnight_bitcoin_private_{safe_addr}_{os.getpid()}.wif"
+            wif_file = self.workspace / f"midnight_bitcoin_phantom_{safe_addr}_{os.getpid()}.wif"
             with open(wif_file, 'w') as f:
                 f.write(private_key_wif)
             
             # Create success instructions
-            success_file = self.workspace / f"MIDNIGHT_BITCOIN_SUCCESS_{safe_addr}_{os.getpid()}.txt"
+            success_file = self.workspace / f"MIDNIGHT_BITCOIN_PHANTOM_{safe_addr}_{os.getpid()}.txt"
             with open(success_file, 'w', encoding='utf-8') as f:
                 f.write("🎉 MIDNIGHT BITCOIN CLAIM KEY SUCCESSFULLY FOUND!\n")
                 f.write("=" * 80 + "\n\n")
@@ -264,43 +269,41 @@ class BitcoinMidnightClaim:
                 f.write("🔑 PRIVATE KEY FILE:\n")
                 f.write(f"WIF Format: {wif_file.name}\n\n")
                 
-                f.write("🚀 SOFTWARE WALLET IMPORT INSTRUCTIONS:\n")
+                f.write("🦄 PHANTOM WALLET IMPORT INSTRUCTIONS:\n")
                 f.write("=" * 50 + "\n")
-                f.write("OPTION 1: Electrum Wallet (Recommended)\n")
-                f.write("1. Download Electrum from electrum.org\n")
-                f.write("2. File → New/Restore\n")
-                f.write("3. Choose 'Import Bitcoin addresses or private keys'\n")
-                f.write(f"4. Paste WIF key from: {wif_file.name}\n")
-                f.write("5. Next → Create\n")
-                f.write("6. Connect to Midnight Portal\n")
-                f.write("7. Execute claim\n\n")
+                f.write("1. Install Phantom Wallet from phantom.app\n")
+                f.write("2. Open Phantom extension\n")
+                f.write("3. Click wallet icon (top right)\n")
+                f.write("4. Select 'Add/Connect Wallet'\n")
+                f.write("5. Choose 'Import Private Key'\n")
+                f.write("6. Select 'Bitcoin' as blockchain\n")
+                f.write(f"7. Paste WIF key from: {wif_file.name}\n")
+                f.write("8. Name wallet: 'Midnight Claim'\n")
+                f.write("9. Confirm import\n\n")
                 
-                f.write("OPTION 2: Sparrow Wallet\n")
-                f.write("1. Download Sparrow from sparrowwallet.com\n")
-                f.write("2. File → New Wallet\n")
-                f.write("3. Choose 'Imported'\n")
-                if derivation_info['address_type'] == 'legacy':
-                    f.write("4. Script Type: P2PKH\n")
-                elif derivation_info['address_type'] == 'segwit':
-                    f.write("4. Script Type: P2SH-P2WPKH\n")
-                elif derivation_info['address_type'] == 'native_segwit':
-                    f.write("4. Script Type: P2WPKH\n")
-                f.write(f"5. Paste WIF key from: {wif_file.name}\n")
-                f.write("6. Create Wallet\n\n")
+                f.write("🌙 MIDNIGHT PORTAL CONNECTION:\n")
+                f.write("=" * 30 + "\n")
+                f.write("1. Navigate to midnight.network\n")
+                f.write("2. Click 'Connect Wallet'\n")
+                f.write("3. Select 'Phantom'\n")
+                f.write("4. Authorize connection\n")
+                f.write("5. Verify correct address is displayed\n")
+                f.write("6. Execute claim transaction\n\n")
                 
                 f.write("⚠️ IMMEDIATELY AFTER CLAIMING:\n")
                 f.write("=" * 30 + "\n")
                 f.write(f"1. DELETE: {wif_file.name}\n")
-                f.write("2. DELETE: Software wallet you created\n")
-                f.write("3. Transfer Midnight tokens to NEW secure hardware wallet\n")
-                f.write("4. Delete entire project folder\n")
-                f.write("5. Clear browser cache/history\n")
-                f.write("6. Abandon OLD wallet completely\n\n")
+                f.write("2. REMOVE: Imported wallet from Phantom\n")
+                f.write("3. TRANSFER: Claimed tokens to NEW secure hardware wallet\n")
+                f.write("4. DELETE: Entire project folder\n")
+                f.write("5. CLEAR: Browser cache/history\n")
+                f.write("6. ABANDON: OLD wallet completely\n\n")
                 
-                f.write("🔐 SECURITY REMINDER:\n")
+                f.write("🔒 SECURITY REMINDER:\n")
                 f.write("- Your OLD wallet seed is now compromised\n")
                 f.write("- Never use OLD wallet addresses for receiving anything\n")
                 f.write("- All future transactions should use your NEW secure wallet\n")
+                f.write("- Only Phantom Wallet supports Bitcoin private key import for this portal\n")
             
             result = {
                 'wif_file': str(wif_file),
@@ -376,12 +379,12 @@ class BitcoinMidnightClaim:
             f.write("3. **VERIFY ELIGIBLE ADDRESS:**\n")
             f.write("   - Double-check address from Midnight Portal\n")
             f.write("   - Ensure no copy-paste errors\n")
-            f.write("   - Verify address type detection is correct\n\n")
+            f.write("   - Verify address starts with bc1\n\n")
             
             f.write("4. **ALTERNATIVE APPROACHES:**\n")
-            f.write("   - Try exporting from Trezor Suite directly\n")
-            f.write("   - Use Electrum with Trezor hardware wallet mode\n")
-            f.write("   - Contact Midnight team for alternative claim methods\n\n")
+            f.write("   - Contact Midnight support for alternative claim methods\n")
+            f.write("   - Check if you have other eligible bc1 addresses\n")
+            f.write("   - Wait for expanded wallet support from portal\n\n")
             
             f.write("📞 IF STILL STUCK:\n")
             f.write("The fundamental issue is that your wallet derivation doesn't match\n")
@@ -390,8 +393,8 @@ class BitcoinMidnightClaim:
             f.write("- The eligible address is from a different wallet\n")
             f.write("- There's a derivation compatibility issue\n\n")
             
-            f.write("Consider using your hardware wallet's native export functionality\n")
-            f.write("or contacting the Midnight community for assistance.\n")
+            f.write("Consider contacting Midnight support for alternative claiming methods\n")
+            f.write("since this process only works with bc1 addresses and Phantom Wallet.\n")
         
         logger.info(f"Comprehensive diagnostic saved: {diag_file}")
 
@@ -401,6 +404,7 @@ class BitcoinMidnightClaim:
         """
         logger.info("🎯 Starting comprehensive Bitcoin Midnight claim test...")
         logger.info("This will test multiple scenarios to find the exact derivation...")
+        logger.info("🦄 Generating keys for Phantom Wallet import only...")
         
         # First, do a quick verification check
         if not self._quick_verification_check():
@@ -426,6 +430,7 @@ class BitcoinMidnightClaim:
                 print(f"\n✅ SUCCESS! Bitcoin private key extracted!")
                 print(f"📂 Saved to: {self.workspace}")
                 print(f"📖 Read: {Path(key_result['success_file']).name}")
+                print(f"🦄 Ready for Phantom Wallet import!")
                 
                 return True
             else:
@@ -445,10 +450,11 @@ class BitcoinMidnightClaim:
             return False
 
 def main():
-    print("🎯 Midnight Bitcoin Claim - COMPREHENSIVE TEST")
+    print("🎯 Midnight Bitcoin Claim - PHANTOM WALLET ONLY")
     print("=" * 80)
     print("Testing multiple accounts, passphrase scenarios, and derivation methods")
-    print("Extracting Bitcoin private keys for software wallet import")
+    print("Extracting Bitcoin private keys for Phantom Wallet import")
+    print("⚠️  LIMITATION: Only works with Native SegWit (bc1) addresses")
     print("=" * 80)
     
     try:
@@ -461,7 +467,7 @@ def main():
         
         if success:
             print("\n🏆 BITCOIN CLAIM TEST SUCCESSFUL!")
-            print("Your Bitcoin private key is ready for software wallet import!")
+            print("Your Bitcoin private key is ready for Phantom Wallet import!")
             return True
         else:
             print("\n❌ Bitcoin claim test failed")
