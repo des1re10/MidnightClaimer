@@ -1,0 +1,21 @@
+# MidnightClaimer GUI Requirements
+# User-friendly graphical interface for Midnight token claims
+
+# Core cryptographic libraries
+pycardano>=0.11.0
+bitcoinlib>=0.6.0
+mnemonic>=0.20
+
+# GUI and image processing
+Pillow>=9.0.0
+
+# Standard libraries (usually included with Python)
+# tkinter - included with Python
+# threading - included with Python
+# queue - included with Python
+# logging - included with Python
+# pathlib - included with Python
+
+# Development and testing dependencies (optional)
+pytest>=7.0.0
+pytest-cov>=4.0.0

@@ -1,26 +1,15 @@
 @echo off
-REM Midnight Claim Script Runner with Admin Rights
-REM This script runs the midnight_claim.py script with elevated privileges
+REM MidnightClaimer GUI Windows Launcher
+REM User-friendly graphical interface for Midnight token claims
 
-echo ========================================
-echo Midnight Token Claim Script Runner
-echo ========================================
 echo.
-
-REM Check if running as administrator
-net session >nul 2>&1
-if %errorLevel% == 0 (
-    echo Running with administrator privileges...
-    echo.
-) else (
-    echo This script requires administrator privileges.
-    echo Requesting elevation...
-    echo.
-    echo Press any key to continue with elevation request...
-    pause
-    powershell -Command "Start-Process cmd -ArgumentList '/c cd /d \"%~dp0\" && \"%~f0\"' -Verb RunAs"
-    exit /b
-)
+echo ================================================
+echo MidnightClaimer GUI - Secure Token Claiming Tool
+echo ================================================
+echo.
+echo Starting user-friendly graphical interface...
+echo No administrator privileges required for GUI mode.
+echo.
 
 REM Change to script directory
 cd /d "%~dp0"
@@ -32,7 +21,9 @@ if %errorLevel% neq 0 (
     python3 --version >nul 2>&1
     if %errorLevel% neq 0 (
         echo ERROR: Python is not installed or not in PATH
-        echo Please install Python 3.x and add it to your system PATH
+        echo Please install Python 3.8+ and add it to your system PATH
+        echo.
+        echo Download Python from: https://python.org/downloads
         echo.
         echo Press any key to exit...
         pause
@@ -45,71 +36,122 @@ if %errorLevel% neq 0 (
 )
 
 echo Using Python command: %PYTHON_CMD%
+%PYTHON_CMD% --version
 echo.
 
-REM Install required Python packages
-echo Checking and installing required Python packages...
-%PYTHON_CMD% -c "import pycardano, dotenv, bech32" 2>nul
+REM Check for tkinter (required for GUI)
+echo Checking GUI support...
+%PYTHON_CMD% -c "import tkinter; print('GUI support available')" 2>nul
+if %errorLevel% neq 0 (
+    echo ERROR: Python tkinter module not found
+    echo tkinter is required for the GUI interface
+    echo.
+    echo On Windows: Reinstall Python with "tcl/tk and IDLE" option checked
+    echo On Linux: Install python3-tk package
+    echo.
+    echo Press any key to exit...
+    pause
+    exit /b 1
+)
+
+REM Install/upgrade pip
+echo Updating pip...
+%PYTHON_CMD% -m pip install --upgrade pip --quiet
+
+REM Install GUI dependencies
+echo Checking and installing GUI dependencies...
+echo This may take a few minutes on first run...
+echo.
+
+%PYTHON_CMD% -c "import pycardano, bitcoinlib, mnemonic; from PIL import Image" 2>nul
 if %errorLevel% neq 0 (
     echo Installing missing dependencies...
-    %PYTHON_CMD% -m pip install pycardano python-dotenv bech32
+    echo This will install: pycardano, bitcoinlib, mnemonic, Pillow
+    echo.
+    
+    %PYTHON_CMD% -m pip install -r requirements_gui.txt
+    
+    echo.
+    echo Verifying installation...
+    %PYTHON_CMD% -c "import pycardano, bitcoinlib, mnemonic; from PIL import Image; print('All dependencies verified successfully!')" 2>nul
     if %errorLevel% neq 0 (
         echo ERROR: Failed to install required dependencies
-        echo Please run: pip install pycardano python-dotenv bech32
+        echo.
+        echo Please try manual installation:
+        echo %PYTHON_CMD% -m pip install pycardano bitcoinlib mnemonic Pillow
         echo.
         echo Press any key to exit...
         pause
         exit /b 1
     )
-    echo Dependencies installed successfully.
+    echo Dependencies installed and verified successfully!
 ) else (
     echo All required dependencies are already installed.
 )
 echo.
 
-REM Check if .env file exists
-if not exist ".env" (
-    echo ERROR: .env file not found!
-    echo.
-    echo Please create a .env file with the following content:
-    echo TREZOR_SEED_PHRASE='your 24 word seed phrase'
-    echo TREZOR_PASSPHRASE='your passphrase'
-    echo CLAIM_ADDRESS='addr1q...'
-    echo CONTROLLED_STAKE_KEY='stake1...'
-    echo CARDANO_CLI_PATH='C:\Users\%USERNAME%\AppData\Roaming\Cardano\cardano-cli.exe'
-    echo CARDANO_NODE_SOCKET_PATH='\\.\pipe\cardano-node'
+REM Check if GUI launcher exists
+if not exist "run_gui.py" (
+    echo ERROR: run_gui.py not found in current directory
+    echo Please ensure you have the complete MidnightClaimer GUI package
     echo.
     echo Press any key to exit...
     pause
     exit /b 1
 )
 
-REM Check if midnight_claim.py exists
-if not exist "midnight_claim.py" (
-    echo ERROR: midnight_claim.py not found in current directory
-    echo.
-    echo Press any key to exit...
-    pause
-    exit /b 1
-)
-
-REM Run the Python script
-echo Starting Midnight Claim process...
+REM Display security warning
+echo ========================================
+echo SECURITY REMINDER
+echo ========================================
 echo.
-%PYTHON_CMD% midnight_claim.py
+echo Before using this tool:
+echo  1. Create a NEW wallet and transfer funds there
+echo  2. Use your OLD wallet only for claiming authorization
+echo  3. Use a secure, isolated computer
+echo  4. Delete all generated files after claiming
+echo.
+echo The GUI will guide you through the secure process.
+echo ========================================
+echo.
+
+REM Ask user confirmation
+echo Press any key to launch the GUI, or Ctrl+C to cancel...
+pause >nul
+
+REM Launch the GUI
+echo Starting MidnightClaimer GUI...
+echo.
+echo Executing: %PYTHON_CMD% run_gui.py
+echo Working directory: %CD%
+echo.
+%PYTHON_CMD% run_gui.py
+echo GUI process returned with exit code: %errorLevel%
 
 REM Check exit code
 if %errorLevel% equ 0 (
     echo.
     echo ========================================
-    echo Script completed successfully!
+    echo GUI application closed normally
     echo ========================================
+    echo.
+    echo Remember to:
+    echo  - Delete any generated private key files
+    echo  - Clear browser cache if you imported keys
+    echo  - Transfer claimed tokens to your NEW secure wallet
+    echo.
 ) else (
     echo.
     echo ========================================
-    echo Script completed with errors (Exit code: %errorLevel%)
+    echo GUI application closed with exit code: %errorLevel%
     echo ========================================
+    echo.
+    echo If you encountered issues:
+    echo  - Check the midnight_claimer_gui.log file for details
+    echo  - Ensure all dependencies are correctly installed
+    echo  - Try running: python run_gui.py directly
+    echo.
 )
 
-echo.
+echo Press any key to exit...
 pause
