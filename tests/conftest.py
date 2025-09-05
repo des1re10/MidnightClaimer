@@ -103,17 +103,45 @@ mock_pycardano.HDWallet.from_mnemonic = Mock(return_value=mock_hdwallet)
 mock_bitcoinlib = MagicMock()
 mock_bitcoinlib.keys = MagicMock()
 
-# Create mock HDKey for Bitcoin tests
-mock_bitcoin_hdkey = MagicMock()
-mock_bitcoin_hdkey.address = Mock(return_value="1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")
-# Make the address() callable return the address string directly
-mock_bitcoin_hdkey.address = lambda: "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
-# Add WIF key generation
-mock_bitcoin_hdkey.wif = lambda: "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ"
+# Create mock HDKey for Bitcoin tests with proper method returns
+def create_bitcoin_hdkey_mock(address_type="legacy"):
+    """Create a mock HDKey with proper address and WIF generation"""
+    mock_key = MagicMock()
+    
+    # Configure address generation based on type
+    if address_type == "legacy":
+        mock_key.address = lambda: "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
+    elif address_type == "segwit":
+        mock_key.address = lambda: "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+    else:  # native_segwit
+        mock_key.address = lambda: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+    
+    # Configure WIF generation (always compressed for newer types)
+    if address_type == "legacy":
+        mock_key.wif = lambda: "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ"
+    else:
+        mock_key.wif = lambda: "L1aW4aubDFB7yfras2S1mN3bqg9nwySY8nkoLmJebSLD5BWv3ENZ"
+    
+    return mock_key
+
+# Create the main HDKey mock
+mock_bitcoin_hdkey = create_bitcoin_hdkey_mock("legacy")
+
+# Configure subkey_for_path to return appropriate mocks based on derivation path
+def mock_subkey_for_path(path):
+    if "44'" in path:  # Legacy P2PKH
+        return create_bitcoin_hdkey_mock("legacy")
+    elif "49'" in path:  # SegWit P2SH-P2WPKH
+        return create_bitcoin_hdkey_mock("segwit") 
+    elif "84'" in path:  # Native SegWit P2WPKH
+        return create_bitcoin_hdkey_mock("native_segwit")
+    else:
+        return create_bitcoin_hdkey_mock("legacy")  # Default fallback
+
+mock_bitcoin_hdkey.subkey_for_path = mock_subkey_for_path
 
 mock_bitcoinlib.keys.HDKey = MagicMock()
 mock_bitcoinlib.keys.HDKey.from_seed = Mock(return_value=mock_bitcoin_hdkey)
-mock_bitcoin_hdkey.subkey_for_path = Mock(return_value=mock_bitcoin_hdkey)
 
 # Mock base58 for address and WIF validation
 mock_base58 = MagicMock()
@@ -157,9 +185,13 @@ def mock_check_seed(phrase):
     # Special handling for test phrases
     if "valid seed phrase" in phrase:
         return True
+    # Check for known invalid checksum phrases first
+    if phrase == "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon":
+        return False
+    
     if len(words) in [12, 15, 18, 21, 24]:
         return True
-    # For common test scenarios
+    # For common test scenarios - but reject known invalid checksums
     if "abandon" in phrase and len(words) >= 12:
         return True
     return False

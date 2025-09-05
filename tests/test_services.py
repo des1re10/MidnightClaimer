@@ -98,12 +98,11 @@ class TestCardanoService(unittest.TestCase):
                 'address_type': 'payment_stake'
             }
             
-            # Patch ExtendedSigningKey using the full module path as imported
+            # Patch the imported ExtendedSigningKey class in the service module
             with patch('Src.services.cardano_service.ExtendedSigningKey') as mock_esk:
-                # Create properly configured mock instance
+                # Configure the mock to return proper string JSON
                 mock_key_instance = Mock()
                 mock_key_instance.to_json.return_value = '{"type": "PaymentExtendedSigningKeyShelley_ed25519", "description": "Payment Signing Key", "cborHex": "5880abcdef"}'
-                # Configure the class method to return our mock instance
                 mock_esk.from_hdwallet.return_value = mock_key_instance
                 
                 result = self.service.extract_keys(derivation_info, output_dir)
