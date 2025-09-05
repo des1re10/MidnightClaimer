@@ -1,8 +1,20 @@
 # ₿ Midnight Token Claim for Bitcoin Addresses (Trezor Users)
 
-**Extract Bitcoin private keys from Trezor wallets to claim Midnight tokens via software wallets**
+**Extract Bitcoin private keys from Trezor wallets to claim Midnight tokens via Phantom Wallet**
 
-This tool helps Trezor users extract the correct Bitcoin private keys needed to claim Midnight (NIGHT) tokens from eligible Bitcoin addresses. It works with **both passphrase-protected and standard Trezor wallets**.
+This tool helps Trezor users extract Bitcoin private keys needed to claim Midnight (NIGHT) tokens from eligible Bitcoin addresses. **CRITICAL LIMITATION: This process ONLY works with Native SegWit (bc1) and Taproot Bitcoin addresses using Phantom Wallet.**
+
+## ⚠️ CRITICAL COMPATIBILITY WARNING
+
+**THIS PROCESS ONLY WORKS IF:**
+- Your eligible Bitcoin address starts with `bc1` (Native SegWit) or is Taproot format
+- You can use Phantom Wallet browser extension
+- Phantom successfully imports your WIF private key
+
+**THIS PROCESS WILL NOT WORK FOR:**
+- Legacy addresses starting with `1`
+- SegWit addresses starting with `3`
+- Users who cannot install browser extensions
 
 ## ⚠️ CRITICAL SECURITY WARNING
 
@@ -46,20 +58,20 @@ This tool helps Trezor users extract the correct Bitcoin private keys needed to 
 
 ## 🎯 What This Solves
 
-Midnight token claims from Bitcoin addresses require importing private keys into software wallets, but Trezor users can't easily extract these keys. This tool:
+Midnight token claims from Bitcoin addresses require importing private keys into browser wallets, but Trezor users can't easily extract these keys. This tool:
 
 - ✅ Derives correct Bitcoin private keys from your Trezor seed
 - ✅ Works with passphrase-protected wallets
-- ✅ Supports all Bitcoin address types (Legacy, SegWit, Native SegWit)
+- ✅ Supports Native SegWit (bc1) and Taproot addresses ONLY
 - ✅ Tests multiple derivation scenarios automatically
-- ✅ Generates WIF format private keys for software wallet import
+- ✅ Generates WIF format private keys for Phantom wallet import
 - ✅ Provides step-by-step claim instructions
 
 ## 📋 Requirements
 
 ### Software Requirements
 - **Python 3.8+** with pip
-- **Software Bitcoin wallet** (Electrum, Sparrow, or Bitcoin Core)
+- **Phantom Wallet browser extension**
 - **Browser** for Midnight Portal access
 
 ### Hardware Requirements
@@ -68,23 +80,28 @@ Midnight token claims from Bitcoin addresses require importing private keys into
 - **Passphrase** (if you use one, otherwise leave empty)
 
 ### Bitcoin Information Needed
-- **Eligible Bitcoin address** from Midnight Portal
-- **Bitcoin address type** (Legacy/SegWit/Native SegWit)
+- **Eligible Bitcoin address** from Midnight Portal (MUST start with bc1 or be Taproot)
+- **Bitcoin address type** (Native SegWit or Taproot ONLY)
 
 ## ⚡ Quick Start
 
-### 1. Download Files
+### 1. Check Address Compatibility
+**BEFORE PROCEEDING, verify your eligible Bitcoin address starts with `bc1`**
+
+If your address starts with `1` or `3`, this process will NOT work. Contact Midnight support for alternative claiming methods.
+
+### 2. Download Files
 Download these files to a secure folder:
 - `midnight_claim_bitcoin.py` (main script)
 - `requirements_bitcoin.txt` (dependencies)
 - `.env.example_bitcoin` (configuration template)
 
-### 2. Install Dependencies
+### 3. Install Dependencies
 ```bash
 pip install -r requirements_bitcoin.txt
 ```
 
-### 3. Setup Environment
+### 4. Setup Environment
 Copy the template and create your configuration:
 ```bash
 cp .env.example_bitcoin .env
@@ -98,47 +115,17 @@ TREZOR_SEED_PHRASE=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 
 # Replace with your actual passphrase (or leave empty if none)
 TREZOR_PASSPHRASE=YourActualPassphrase
 
-# Replace with your eligible Bitcoin address from Midnight Portal
-BITCOIN_CLAIM_ADDRESS=1A1zP5eP6**************************
+# Replace with your eligible Bitcoin address from Midnight Portal (MUST start with bc1)
+BITCOIN_CLAIM_ADDRESS=bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4
 ```
 
-### 4. Run the Script
+### 5. Run the Script
 ```bash
 python midnight_claim_bitcoin.py
 ```
 
-### 5. Import to Software Wallet
-The script generates WIF (Wallet Import Format) private keys that can be imported into any Bitcoin software wallet.
-
-## 📍 How to Get Required Information
-
-### Getting Your Eligible Bitcoin Address
-1. Visit [Midnight Portal](https://midnight.network)
-2. Connect your wallet or check eligibility
-3. Navigate to Bitcoin token claim section
-4. Copy the displayed eligible Bitcoin address
-
-### Understanding Bitcoin Address Types
-
-#### Legacy Addresses (P2PKH)
-- **Format**: Start with `1`
-- **Example**: `1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa`
-- **Derivation**: `m/44'/0'/0'/0/0`
-- **Note**: Oldest format, highest fees
-
-#### SegWit Addresses (P2SH-P2WPKH)
-- **Format**: Start with `3`
-- **Example**: `3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy`
-- **Derivation**: `m/49'/0'/0'/0/0`
-- **Note**: Wrapped SegWit, medium fees
-
-#### Native SegWit Addresses (P2WPKH)
-- **Format**: Start with `bc1`
-- **Example**: `bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4`
-- **Derivation**: `m/84'/0'/0'/0/0`
-- **Note**: Modern format, lowest fees
-
-The script automatically detects your address type and tests appropriate derivation paths.
+### 6. Import to Phantom Wallet
+The script generates WIF (Wallet Import Format) private keys that can be imported into Phantom Wallet ONLY.
 
 ## 📖 Example Successful Output
 
@@ -148,7 +135,7 @@ When the script works correctly, you'll see output like this:
 🎯 Bitcoin Midnight Claim Tool
 ================================================================================
 Testing Bitcoin derivation scenarios for Midnight token claiming
-Workspace: D:\workspace\VisualStudio\Midnight Bitcoin Claim
+Workspace: /your/secure/folder/bitcoin_claim_output
 ================================================================================
 
 ✅ Seed phrase valid (12 words)
@@ -169,81 +156,54 @@ Extracting private key...
 🎊 BITCOIN MIDNIGHT CLAIM KEY SUCCESSFULLY GENERATED!
 ==========================================================================================
 
-📁 KEY SAVED TO: D:\workspace\VisualStudio\Midnight Bitcoin Claim
+📁 KEY SAVED TO: /your/secure/folder/bitcoin_claim_output
 🔑 WIF File: bitcoin_midnight_key_bc1qw508_12345.wif
 📋 Instructions: BITCOIN_SUCCESS_bc1qw508_12345.txt
 
 ✅ SUCCESS! Bitcoin private key extracted!
-📂 Saved to: D:\workspace\VisualStudio\Midnight Bitcoin Claim
+📂 Saved to: /your/secure/folder/bitcoin_claim_output
 📖 Read instructions: BITCOIN_SUCCESS_bc1qw508_12345.txt
 
 🏆 BITCOIN CLAIM PREPARATION SUCCESSFUL!
-Your Bitcoin private key is ready for wallet import!
+Your Bitcoin private key is ready for Phantom wallet import!
 ```
 
-## 💾 Software Wallet Import Process
+## 👤 Phantom Wallet Import Process
 
-### Option 1: Electrum Wallet (Recommended)
+### 1. Install Phantom Wallet
+- Visit [phantom.app](https://phantom.app)
+- Install browser extension
+- Create or restore a wallet (you can use a temporary one)
 
-#### 1. Install Electrum
-- Download from [electrum.org](https://electrum.org)
-- Verify signature and install
+### 2. Import Private Key to Phantom
+1. Open Phantom extension
+2. Click the **wallet icon** (top right)
+3. Select **"Add/Connect Wallet"**
+4. Choose **"Import Private Key"**
+5. Select **"Bitcoin"** as the blockchain
+6. Paste your WIF private key from the `.wif` file
+7. Name the imported wallet (e.g., "Midnight Claim")
+8. Confirm import
 
-#### 2. Import Private Key
-1. Open Electrum
-2. **File** → **New/Restore**
-3. Choose **"Import Bitcoin addresses or private keys"**
-4. Paste your WIF private key from the `.wif` file
-5. **Next** → **Create**
-6. Wallet is ready for claiming
+### 3. Connect to Midnight Portal
+1. Navigate to [Midnight Portal](https://midnight.network)
+2. Click **"Connect Wallet"**
+3. Select **"Phantom"** from the wallet list
+4. Authorize the connection
+5. Verify the correct Bitcoin address is displayed
 
-### Option 2: Sparrow Wallet
-
-#### 1. Install Sparrow
-- Download from [sparrowwallet.com](https://sparrowwallet.com)
-- Install and launch
-
-#### 2. Import Private Key
-1. **File** → **New Wallet**
-2. Choose **"Imported"**
-3. **Script Type**: Choose based on your address type:
-   - Legacy: P2PKH
-   - SegWit: P2SH-P2WPKH
-   - Native SegWit: P2WPKH
-4. Paste WIF private key
-5. **Create Wallet**
-
-### Option 3: Bitcoin Core (Advanced)
-
-#### 1. Install Bitcoin Core
-- Download from [bitcoin.org](https://bitcoin.org)
-- Sync blockchain (may take days)
-
-#### 2. Import Private Key
-1. Open Bitcoin Core console
-2. Run: `importprivkey "YOUR_WIF_KEY" "midnight_claim"`
-3. Wait for rescan to complete
-
-## 🌙 Claiming Process
-
-### 1. Connect Wallet to Midnight Portal
-1. Open your software wallet
-2. Navigate to [Midnight Portal](https://midnight.network)
-3. Connect your imported wallet
-4. Verify the correct Bitcoin address is displayed
-
-### 2. Execute Claim
+### 4. Execute Claim
 1. Navigate to Bitcoin token claim section
 2. Follow portal instructions
-3. Sign the claim transaction in your software wallet
+3. Sign the claim transaction in Phantom
 4. Confirm transaction
 5. Wait for confirmation
 
-### 3. Secure Cleanup (CRITICAL!)
+### 5. Secure Cleanup (CRITICAL!)
 
 🚨 **IMMEDIATELY after successful claiming:**
 1. **Delete** all `.wif` files from your computer
-2. **Delete** the software wallet you created
+2. **Remove** the imported wallet from Phantom
 3. **Transfer** claimed tokens to your NEW secure hardware wallet
 4. **Delete** entire project folder
 5. **Clear** browser cache/history
@@ -260,48 +220,42 @@ Leave it completely empty - the script will test this scenario automatically.
 
 ### Common Issues
 
+**"Address doesn't start with bc1"**
+- This process only works with Native SegWit addresses
+- Contact Midnight support for alternative claiming methods
+- Consider if you have other eligible addresses in different formats
+
+**"Phantom won't import WIF key"**
+- Ensure you're selecting "Bitcoin" as the blockchain in Phantom
+- Verify the WIF format is correct (should start with K or L for bc1 addresses)
+- Try creating a fresh Phantom wallet first
+
+**"Portal doesn't recognize Phantom wallet"**
+- Ensure Phantom is properly connected to the portal
+- Try disconnecting and reconnecting
+- Check that the imported address matches the eligible one
+
 **"No address match found"**
-- ✅ Script automatically tests multiple derivation scenarios
-- ✅ Verify your seed phrase is exactly correct
-- ✅ Try with empty passphrase if you're unsure
-- ✅ Check if you're using a different account/index
+- Script automatically tests multiple derivation scenarios
+- Verify your seed phrase is exactly correct
+- Try with empty passphrase if you're unsure
+- Check if you're using a different account/index
 
 **"Wallet creation failed"**
 - Check seed phrase format (12 or 24 words, space-separated)
 - Verify no extra spaces or special characters
 - Ensure passphrase encoding is correct
 
-**"Software wallet won't import WIF"**
-- Verify the WIF format is correct (should start with 5, K, or L)
-- Try a different software wallet
-- Check that the wallet supports your address type
-
-**"Portal doesn't recognize address"**
-- Ensure you're using the exact eligible address from the portal
-- Verify your derived address matches the eligible one
-- Contact Midnight support if address eligibility is unclear
-
-**"Permission denied"**
-- Run terminal/command prompt as administrator
-- Ensure Python has write permissions to the folder
-
-## 🔐 Security Best Practices
-
-1. **Use offline computer** for key generation
-2. **Create NEW wallet first** and transfer funds there
-3. **Never share** seed phrases or private keys
-4. **Delete all files** immediately after successful claim
-5. **Use hardware wallet** for long-term storage
-6. **Double-check** all addresses before sending transactions
-7. **Abandon OLD wallet** after claiming is complete
-8. **Verify software wallet downloads** from official sources only
-
 ## 📝 Important Notes
 
-### Bitcoin Address Derivation Paths
-- **Legacy (P2PKH)**: `m/44'/0'/account'/0/index`
-- **SegWit (P2SH-P2WPKH)**: `m/49'/0'/account'/0/index`
-- **Native SegWit (P2WPKH)**: `m/84'/0'/account'/0/index`
+### Address Type Limitations
+**ONLY SUPPORTED:**
+- **Native SegWit (P2WPKH)**: `bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4`
+- **Taproot**: `bc1p...` (if supported by your setup)
+
+**NOT SUPPORTED:**
+- **Legacy (P2PKH)**: `1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa`
+- **SegWit (P2SH-P2WPKH)**: `3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy`
 
 ### Does This Work Without Passphrase?
 **YES!** The script automatically tests multiple scenarios:
@@ -319,28 +273,49 @@ The script automatically tests:
 - Multiple account numbers (0, 1, 2, etc.)
 - Multiple address indices (0-19 for each account)
 - All passphrase scenarios
-- Proper derivation paths for detected address types
+- Proper derivation paths for Native SegWit addresses
+
+## ⚠️ Wallet Portal Limitations
+
+The Midnight Portal only supports these browser wallets:
+- **Phantom** (Bitcoin private key import supported)
+- **OKX Wallet** (seed phrase only)
+- **Leather** (seed phrase only)
+- **Xverse Wallet** (seed phrase only)
+- **Ledger Live** (hardware wallet only)
+
+This is why desktop wallets like Electrum and Sparrow cannot be used, despite their superior private key import capabilities.
 
 ## ✅ Tested Configurations
 
 This tool has been tested with:
 
 ### Address Types:
-- ✅ **Legacy addresses** (1...) - P2PKH
-- ✅ **SegWit addresses** (3...) - P2SH-P2WPKH
 - ✅ **Native SegWit addresses** (bc1...) - P2WPKH
+- ❌ **Legacy addresses** (1...) - NOT SUPPORTED
+- ❌ **SegWit addresses** (3...) - NOT SUPPORTED
 
-### Software Wallets:
-- ✅ **Electrum** - Recommended for ease of use
-- ✅ **Sparrow Wallet** - Good for advanced users
-- ✅ **Bitcoin Core** - Full node option
+### Browser Wallets:
+- ✅ **Phantom** - Native SegWit private key import
 
 ### Hardware:
 - ✅ **Trezor Model T** with passphrase protection
 - ✅ **Trezor One** with and without passphrase
 - ✅ **12-word and 24-word seeds**
 
-## 💝 Support This Project
+## 🆘 Alternative Solutions
+
+### If Your Address Is Not bc1 Format:
+1. **Contact Midnight Support** - they may have alternative claiming methods
+2. **Check for other eligible addresses** - you might have bc1 addresses you haven't checked
+3. **Wait for expanded wallet support** - portal may add more wallet options
+
+### If Phantom Import Fails:
+1. **Try creating a completely fresh Phantom wallet**
+2. **Contact Phantom support** about private key import issues
+3. **Reach out to Midnight community** for alternative approaches
+
+## 💡 Support This Project
 
 If this tool helped you successfully claim your Midnight tokens, consider supporting the project! 
 
@@ -350,7 +325,7 @@ If this tool helped you successfully claim your Midnight tokens, consider suppor
 
 - **Script Issues**: Create GitHub issue with error details
 - **Midnight Claims**: Contact Midnight support team
-- **Bitcoin Wallet Problems**: Consult wallet documentation
+- **Phantom Wallet Problems**: Consult Phantom documentation
 - **General Bitcoin Questions**: Bitcoin community forums
 
 ## ⚖️ Disclaimer
@@ -361,9 +336,10 @@ If this tool helped you successfully claim your Midnight tokens, consider suppor
 - **Use only for legitimate token claims**
 - **Delete all private keys after use**
 - **This method exposes your seed phrase - use recommended security strategy**
+- **Limited to Native SegWit addresses only**
 
 ---
 
-**🎯 Successfully claim your Midnight tokens from Bitcoin addresses safely!**
+**🎯 Successfully claim your Midnight tokens from Native SegWit Bitcoin addresses safely!**
 
-*Remember: Security first - create new wallet, use old eligible address, delete everything after claiming!*
+*Remember: This only works with bc1 addresses. Contact Midnight support if your address starts with 1 or 3.*
