@@ -47,8 +47,9 @@ Midnight token claims require importing private keys into Eternl wallet, but Tre
 ## 📋 Requirements
 
 ### Software Requirements
-- **Python 3.8+** with pip
+- **Python 3.8+** with pip (including latest versions like Python 3.13.7)
 - **Browser** with Eternl wallet extension
+- **Cardano Node** (synced mainnet node - see setup instructions below)
 
 ### Hardware Requirements
 - **Trezor hardware wallet** (Model T or One)
@@ -276,16 +277,100 @@ Leave it completely empty - the script will test this scenario automatically.
 - **24-word seeds**: Fully supported
 - Both are tested automatically
 
-### Cardano Node Requirement
-You need a **synced Cardano node** for:
-- Address verification
-- Transaction building
-- Network communication
+## 🔗 Cardano Node Setup (Required)
 
-Install via:
-- **Daedalus** (includes node)
-- **Cardano CLI** (standalone)
-- **Docker** (cardano-node image)
+You need a **synced Cardano mainnet node** for address verification and network communication.
+
+### Installation Options
+
+#### Option 1: Daedalus Wallet (Easiest)
+- Download from [daedaluswallet.io](https://daedaluswallet.io)
+- Includes built-in Cardano node
+- Automatically syncs mainnet
+- No manual configuration needed
+
+#### Option 2: Dedicated Cardano Node (Recommended for this script)
+
+### Windows Setup
+
+1. **Download Cardano Node:**
+   - Visit: https://github.com/IntersectMBO/cardano-node/releases
+   - Download latest Windows release
+   - Extract to: `C:\Users\username\AppData\Roaming\Cardano`
+
+2. **Download Configuration Files:**
+   - Get `mainnet-topology.json` and `mainnet-config.yaml` from:
+     https://github.com/input-output-hk/cardano-node/tree/master/configuration/cardano
+   - Place them in your cardano-node folder
+
+3. **Run Cardano Node:**
+   ```cmd
+   cardano-node.exe run ^
+       --topology ./configuration/cardano/mainnet-topology.json ^
+       --database-path ./state ^
+       --port 3001 ^
+       --config ./configuration/cardano/mainnet-config.yaml ^
+       --socket-path \\.\pipe\cardano-node
+   ```
+
+4. **Set Environment Variable:**
+   ```cmd
+   set CARDANO_NODE_SOCKET_PATH=\\.\pipe\cardano-node
+   ```
+
+5. **Verify Setup:**
+   ```cmd
+   echo %CARDANO_NODE_SOCKET_PATH%
+   cardano-cli query tip --mainnet
+   ```
+
+### Linux Setup
+
+1. **Download and Extract:**
+   ```bash
+   wget https://github.com/IntersectMBO/cardano-node/releases/download/8.9.1/cardano-node-8.9.1-linux.tar.gz
+   tar -zxvf cardano-node-8.9.1-linux.tar.gz
+   ```
+
+2. **Run Cardano Node:**
+   ```bash
+   chmod +x run_cardano_node.sh
+   ./run_cardano_node.sh
+   ```
+
+3. **Set Environment Variable:**
+   ```bash
+   echo "export CARDANO_NODE_SOCKET_PATH=/home/username/Cardano/db/socket" >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+4. **Verify Setup:**
+   ```bash
+   echo $CARDANO_NODE_SOCKET_PATH
+   cardano-cli query tip --mainnet
+   ```
+
+### Successful Sync Verification
+
+When properly synced, `cardano-cli query tip --mainnet` should return:
+```json
+{
+    "block": 10241329,
+    "epoch": 481,
+    "era": "Babbage",
+    "hash": "ac21826f9da1facad7634b1cf3d7d62d414238dc58fc871807136bb38dd63290",
+    "slot": 122664226,
+    "slotInEpoch": 235426,
+    "slotsToEpochEnd": 196574,
+    "syncProgress": "100.00"
+}
+```
+
+**Important:** Wait for `"syncProgress": "100.00"` before running the claim script.
+
+### Detailed Setup Tutorials
+- **Windows:** https://docs.cardano.org/native-tokens/getting-started
+- **Official Node Documentation:** https://developers.cardano.org/docs/get-started/running-cardano
 
 ## ✅ Tested Configuration
 
