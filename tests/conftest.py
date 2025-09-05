@@ -115,24 +115,30 @@ def create_bitcoin_hdkey_mock(address_type="legacy", derivation_path=None):
         # Generate a deterministic but unique address based on the path
         path_hash = hashlib.md5(derivation_path.encode()).hexdigest()
         
+        # Set private_hex attribute for validation (use first 64 chars of hash repeated)
+        private_hex = (path_hash * 2)[:64]
+        mock_key.private_hex = private_hex
+        
         if address_type == "legacy":
             # Create a valid legacy address format starting with '1'
             # Use the first few characters of hash to make it unique
             unique_part = path_hash[:6]
             fixed_address = f"1{unique_part}BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"[:34]
-            mock_key.address = lambda addr=fixed_address: addr
+            mock_key.address = Mock(return_value=fixed_address)
         elif address_type == "segwit":
             # Create a valid segwit address format starting with '3'
             unique_part = path_hash[:6]
             fixed_address = f"3{unique_part}J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"[:34]
-            mock_key.address = lambda addr=fixed_address: addr
+            mock_key.address = Mock(return_value=fixed_address)
         else:  # native_segwit
             # Create a valid native segwit address format starting with 'bc1q'
             unique_part = path_hash[:10]
             fixed_address = f"bc1q{unique_part}ar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"[:42]
-            mock_key.address = lambda addr=fixed_address: addr
+            mock_key.address = Mock(return_value=fixed_address)
     else:
-        # Default addresses (fallback)
+        # Default addresses (fallback) - need private_hex for these too
+        mock_key.private_hex = "a" * 64  # Default private key hex
+        
         if address_type == "legacy":
             mock_key.address = lambda: "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
         elif address_type == "segwit":
