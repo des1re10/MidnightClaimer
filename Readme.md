@@ -314,16 +314,14 @@ This tool has been successfully tested with the following setup:
 
 If this tool helped you successfully claim your Midnight tokens, consider sending a small tip to support development and maintenance:
 
+### QR Codes for Easy Donations:
+
 **ADA Address:** `addr1qxk3cq8emwuusdlas04yn0qf3xndd6ts6ta7l3kh4vphuhss0y3k3y7r4ztz6xy0xjysj4j9ksysnlhnp0stqdwwyusq9g5th3`
+
+![ADA Donation QR Code](donation_qr_ada.png)
 
 **BTC Address:** `bc1qkj9f592hlj3m26eukc54xruls6pdzqs70ly8a5`
 
-### QR Codes for Easy Donations:
-
-**ADA Donation QR Code:**
-![ADA Donation QR Code](donation_qr_ada.png)
-
-**BTC Donation QR Code:**
 ![BTC Donation QR Code](donation_qr_btc.png)
 
 *Tips help maintain this project and keep it updated for the community!*
