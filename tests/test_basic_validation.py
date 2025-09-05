@@ -104,7 +104,7 @@ def test_validate_bitcoin_wif():
         from utils.security import validate_bitcoin_wif
         
         # Test WIF format validation (without base58 validation)
-        with patch('utils.security.base58'):
+        with patch('builtins.__import__', side_effect=lambda name, *args: Mock() if name == 'base58' else __import__(name, *args)):
             valid_wif_5 = "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ"  # Uncompressed
             valid_wif_k = "KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617"  # Compressed
             valid_wif_l = "L1aW4aubDFB7yfras2S1mN3bqg9nwySY8nkoLmJebSLD5BWv3ENZ"  # Compressed

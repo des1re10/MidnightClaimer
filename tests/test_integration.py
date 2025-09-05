@@ -50,7 +50,6 @@ class TestFullWorkflowIntegration:
         
         with patch('services.cardano_service.HDWallet') as mock_hdwallet, \
              patch('services.cardano_service.PaymentVerificationKey') as mock_payment_vkey, \
-             patch('services.cardano_service.StakeVerificationKey') as mock_stake_vkey, \
              patch('services.cardano_service.Address') as mock_address, \
              patch('services.cardano_service.ExtendedSigningKey') as mock_extended_key:
             
@@ -69,7 +68,7 @@ class TestFullWorkflowIntegration:
             mock_payment_vk.hash.return_value.payload.hex.return_value = test_stake_checksum
             mock_stake_vk.hash.return_value.payload.hex.return_value = test_stake_checksum
             mock_payment_vkey.from_primitive.return_value = mock_payment_vk
-            mock_stake_vkey.from_primitive.return_value = mock_stake_vk
+            # Removed StakeVerificationKey mock as it's not imported in the service
             
             # Mock address generation
             mock_addr = MagicMock()

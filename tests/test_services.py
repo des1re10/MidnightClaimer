@@ -34,34 +34,40 @@ class TestCardanoService(unittest.TestCase):
     
     def test_detect_address_type(self):
         """Test address type detection"""
-        self.assertEqual(self.service.detect_address_type("addr1qxk3cq8emwuusdlas..."), "shelley")
-        self.assertEqual(self.service.detect_address_type("Ae2tdPwUPEZ..."), "byron")
-        self.assertEqual(self.service.detect_address_type("DdzFF..."), "byron")
-        self.assertEqual(self.service.detect_address_type("unknown123"), "unknown")
-    
-    @patch('Src.services.cardano_service.Mnemonic')
-    def test_validate_seed_phrase(self, mock_mnemonic):
-        """Test seed phrase validation"""
-        mock_mnemo_instance = Mock()
-        mock_mnemonic.return_value = mock_mnemo_instance
+        # Use valid full addresses for testing
+        valid_shelley = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
+        valid_byron_ae2 = "Ae2tdPwUPEZFRbyhz3cpfC2CumGzNkFBN2L42rcUc2yjQpEkxDbkPodpMAi"
+        valid_byron_ddz = "DdzFFzCqrhtAvNhKx3gy7XTdqadZYHqzqLNjBaLKqMGXJHJQbJJfKHJp9k1ndVJFaC7Gq1tCGjQNqJVvwGzqQu5qKzNdkgqN5v8a"
         
-        # Test valid seed phrase
-        mock_mnemo_instance.check.return_value = True
+        self.assertEqual(self.service.detect_address_type(valid_shelley), "shelley")
+        self.assertEqual(self.service.detect_address_type(valid_byron_ae2), "byron")
+        self.assertEqual(self.service.detect_address_type(valid_byron_ddz), "byron")
+        
+        # Test invalid addresses should raise ValueError  
+        with self.assertRaises(ValueError):
+            self.service.detect_address_type("unknown123")
+    
+    def test_validate_seed_phrase(self):
+        """Test seed phrase validation - uses global mnemonic mock from conftest.py"""
+        # Test valid seed phrase (mock returns True by default for valid phrases)
         self.assertTrue(self.service.validate_seed_phrase("valid seed phrase"))
         
-        # Test invalid seed phrase
-        mock_mnemo_instance.check.return_value = False
+        # Test invalid seed phrase (mock returns False for phrases with 'invalid')
         self.assertFalse(self.service.validate_seed_phrase("invalid seed"))
         
-        # Test exception handling
-        mock_mnemo_instance.check.side_effect = Exception("Invalid format")
-        self.assertFalse(self.service.validate_seed_phrase("exception seed"))
+        # Test empty phrase
+        self.assertFalse(self.service.validate_seed_phrase(""))
+        
+        # Test wrong word count
+        self.assertFalse(self.service.validate_seed_phrase("only five words here"))
     
     def test_create_result(self):
         """Test result creation"""
+        # Use a valid address for testing
+        valid_address = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
         result = self.service._create_result(
             0, 0, 5, "m/1852'/1815'/0'/0/0", "m/1852'/1815'/0'/2/5",
-            Mock(), Mock(), "addr1test", "payment_stake",
+            Mock(), Mock(), valid_address, "payment_stake",
             "test_scenario", "test_passphrase"
         )
         
@@ -76,8 +82,9 @@ class TestCardanoService(unittest.TestCase):
             output_dir = Path(temp_dir)
             
             # Mock derivation info
+            valid_address = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
             derivation_info = {
-                'address': 'addr1test123456',
+                'address': valid_address,
                 'derived_payment_wallet': Mock(),
                 'derived_stake_wallet': Mock(),
                 'address_type': 'payment_stake'
@@ -131,29 +138,31 @@ class TestBitcoinService(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.get_derivation_path("invalid", 0, 0, 0)
     
-    @patch('Src.services.bitcoin_service.Mnemonic')
-    def test_validate_seed_phrase(self, mock_mnemonic):
-        """Test seed phrase validation"""
-        mock_mnemo_instance = Mock()
-        mock_mnemonic.return_value = mock_mnemo_instance
-        
-        # Test valid seed phrase
-        mock_mnemo_instance.check.return_value = True
+    def test_validate_seed_phrase(self):
+        """Test seed phrase validation - uses global mnemonic mock from conftest.py"""
+        # Test valid seed phrase (mock returns True by default for valid phrases)
         self.assertTrue(self.service.validate_seed_phrase("valid seed phrase"))
         
-        # Test invalid seed phrase
-        mock_mnemo_instance.check.return_value = False
+        # Test invalid seed phrase (mock returns False for phrases with 'invalid')
         self.assertFalse(self.service.validate_seed_phrase("invalid seed"))
+        
+        # Test empty phrase
+        self.assertFalse(self.service.validate_seed_phrase(""))
+        
+        # Test wrong word count
+        self.assertFalse(self.service.validate_seed_phrase("only five words here"))
     
     def test_extract_private_key(self):
         """Test private key extraction"""
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
             
+            # Use a valid WIF key for testing
+            valid_wif = "L1aW4aubDFB7yfras2S1mN3bqg9nwySY8nkoLmJebSLD5BWv3ENZ"
             derivation_info = {
                 'derivation_result': {
                     'address': '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
-                    'private_key_wif': 'L1234567890abcdef...'
+                    'private_key_wif': valid_wif
                 },
                 'address_type': 'legacy',
                 'account': 0,
@@ -172,7 +181,7 @@ class TestBitcoinService(unittest.TestCase):
             # Verify file contents
             with open(wif_file, 'r') as f:
                 content = f.read()
-                self.assertEqual(content, 'L1234567890abcdef...')
+                self.assertEqual(content, valid_wif)
 
 if __name__ == '__main__':
     unittest.main()

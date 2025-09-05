@@ -13,6 +13,7 @@ import sys
 # Import the mocks from sys.modules for use in tests
 mock_tkinter = sys.modules['tkinter']
 mock_messagebox = sys.modules['tkinter.messagebox']
+tk = mock_tkinter  # Alias for compatibility with existing code
 
 # Mock heavy crypto dependencies for testing
 crypto_mock_modules = {
