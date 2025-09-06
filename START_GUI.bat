@@ -1,6 +1,6 @@
 @echo off
-echo 🌙 MidnightClaimer - Simple Step-by-Step GUI
-echo ============================================
+echo 🌙 MidnightClaimer - Simple GUI Launcher  
+echo ==========================================
 echo.
 
 REM Change to the directory where this batch file is located

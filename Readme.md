@@ -105,32 +105,50 @@ These tools bypass portal issues by:
 - Supporting both passphrase-protected and standard wallets
 - Providing reliable key formats for software wallet import
 
+## 🖥️ Simple Step-by-Step GUI Available!
+
+**NEW**: For an easier experience, use our simple step-by-step GUI:
+
+**👉 [Simple GUI Guide](README_SIMPLE_GUI.md)**
+
+Double-click `START_GUI.bat` (Windows) or run `python simple_gui.py` to launch the guided interface that walks you through the entire process with a visual progress slider.
+
+---
+
 ## 🛠️ Repository Structure
 
 ```
 /
 ├── README.md (this file)
+├── simple_gui.py (Step-by-step GUI - RECOMMENDED)
+├── START_GUI.bat (Windows launcher)
+├── README_SIMPLE_GUI.md (GUI documentation)
 ├── cardano-claim/
 │   ├── README_CARDANO.md
 │   ├── midnight_claim_cardano.py
 │   ├── cli_convert.py
 │   ├── requirements_cardano.txt
 │   └── .env.example_cardano
-├── bitcoin-claim/
-│   ├── README_BITCOIN.md
-│   ├── midnight_claim_bitcoin.py
-│   ├── requirements_bitcoin.txt
-│   └── .env.example_bitcoin
-└── docs/
-    ├── SECURITY_GUIDE.md
-    ├── TROUBLESHOOTING.md
-    └── FAQ.md
+└── bitcoin-claim/
+    ├── README_BITCOIN.md
+    ├── midnight_claim_bitcoin.py
+    ├── requirements_bitcoin.txt
+    └── .env.example_bitcoin
 ```
 
 ## ⚡ Quick Start Guide
 
+### Option 1: Simple GUI (Recommended)
+1. **Double-click `START_GUI.bat`** (Windows) or run `python simple_gui.py`
+2. **Follow the 6-step guided process** with visual progress
+3. **Complete security checklist** and choose claim type
+4. **Create .env file** using the built-in helper
+5. **Run your claim script** with real-time output
+6. **Follow completion instructions** for wallet import and cleanup
+
+### Option 2: Manual Process
 1. **Determine your claim type** (Cardano or Bitcoin address)
-2. **Create NEW wallet** and transfer funds there first
+2. **Create NEW wallet** and transfer funds there first  
 3. **Follow the specific guide** for your claim type
 4. **Extract private keys** using the appropriate tool
 5. **Import to software wallet** and execute claim
@@ -213,7 +231,8 @@ Tips help maintain and improve these tools for the community.
 
 **Choose your path:**
 
-- **🔗 [Cardano Address Claims →](cardano-claim/README_CARDANO.md)**
-- **₿ [Bitcoin Address Claims →](bitcoin-claim/README_BITCOIN.md)**
+- **🖥️ [Simple Step-by-Step GUI →](README_SIMPLE_GUI.md)** (Recommended - guides you through everything)
+- **🔗 [Cardano Address Claims →](cardano-claim/README_CARDANO.md)** (Manual process)
+- **₿ [Bitcoin Address Claims →](bitcoin-claim/README_BITCOIN.md)** (Manual process)
 
 **Remember: Security first - create new wallet, use old address for claiming, delete everything after claiming!**

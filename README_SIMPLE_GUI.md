@@ -13,7 +13,7 @@ A minimal, intuitive slider-based GUI that guides you through the Midnight token
 ## 🚀 Quick Start
 
 ### Windows
-Double-click `run_simple_gui.bat` or run:
+Double-click `START_GUI.bat` or run:
 ```cmd
 python simple_gui.py
 ```
