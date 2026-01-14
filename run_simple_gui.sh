@@ -1,4 +1,21 @@
 #!/bin/bash
+# =============================================================================
+# MidnightClaimer - Simple Step-by-Step GUI
+# =============================================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+PROJECT_NAME="MidnightClaimer"
+PROJECT_DIR="$SCRIPT_DIR"
+
+# Load common functions for terminal title
+COMMON_FUNCTIONS="$SCRIPT_DIR/../Libraries/Scripts/common_functions.sh"
+if [ -f "$COMMON_FUNCTIONS" ]; then
+    sed -i 's/\r$//' "$COMMON_FUNCTIONS" 2>/dev/null || true
+    source "$COMMON_FUNCTIONS"
+    set_terminal_title "$PROJECT_NAME - GUI"
+fi
 
 echo "🌙 MidnightClaimer - Simple Step-by-Step GUI"
 echo "============================================"
