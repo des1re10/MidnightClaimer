@@ -6,6 +6,7 @@ No passphrase variants - uses only your specific passphrase
 """
 
 import os
+import stat
 import unicodedata
 from pathlib import Path
 from dotenv import load_dotenv
@@ -15,6 +16,40 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def write_secret_file(path: Path, content: str) -> None:
+    """Create a new secret file and verify owner-only POSIX permissions."""
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        if os.name == "posix":
+            os.fchmod(descriptor, 0o600)
+            mode = stat.S_IMODE(os.fstat(descriptor).st_mode)
+            if mode != 0o600:
+                raise PermissionError(f"Secret file mode is {mode:o}, expected 600")
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+            descriptor = -1
+            handle.write(content)
+    except Exception:
+        if descriptor >= 0:
+            os.close(descriptor)
+        path.unlink(missing_ok=True)
+        raise
+
+
+def secure_workspace(path: Path) -> None:
+    """Restrict a key workspace where the operating system exposes POSIX modes."""
+    path.mkdir(parents=True, exist_ok=True)
+    if os.name != "posix":
+        logger.warning(
+            "Windows ACLs are not managed by this script; use a private, ACL-restricted CLAIM_WORKSPACE"
+        )
+        return
+    os.chmod(path, 0o700)
+    mode = stat.S_IMODE(path.stat().st_mode)
+    if mode != 0o700:
+        raise PermissionError(f"Claim workspace mode is {mode:o}, expected 700")
+
 
 class DirectMidnightClaim:
     def __init__(self):
@@ -35,8 +70,8 @@ class DirectMidnightClaim:
         logger.info(f"Passphrase-Länge: {len(self.passphrase)} Zeichen")
         
         # Use specific folder instead of temp folder
-        self.workspace = Path(r"D:\workspace\VisualStudio\Midnight Claim")
-        self.workspace.mkdir(parents=True, exist_ok=True)
+        self.workspace = Path(os.getenv('CLAIM_WORKSPACE', "./cardano_claim_output"))
+        secure_workspace(self.workspace)
         logger.info(f"Workspace: {self.workspace}")
         
         self.network = Network.MAINNET
@@ -381,7 +416,8 @@ else:
         Extrahiert die private keys für Eternl import
         """
         logger.info("Extracting private keys...")
-        
+
+        created_secret_files = []
         try:
             address = derivation_info['address']
             payment_wallet = derivation_info['derived_payment_wallet']
@@ -394,8 +430,8 @@ else:
             payment_skey_content = payment_extended_key.to_json()
             
             payment_skey_file = self.workspace / f"midnight_payment_{safe_addr}_{os.getpid()}.skey"
-            with open(payment_skey_file, 'w') as f:
-                f.write(payment_skey_content)
+            write_secret_file(payment_skey_file, payment_skey_content)
+            created_secret_files.append(payment_skey_file)
             
             # Stake Key (falls vorhanden)
             stake_skey_file = None
@@ -404,8 +440,8 @@ else:
                 stake_skey_content = stake_extended_key.to_json()
                 
                 stake_skey_file = self.workspace / f"midnight_stake_{safe_addr}_{os.getpid()}.skey"
-                with open(stake_skey_file, 'w') as f:
-                    f.write(stake_skey_content)
+                write_secret_file(stake_skey_file, stake_skey_content)
+                created_secret_files.append(stake_skey_file)
             
             # Success instructions
             success_file = self.workspace / f"MIDNIGHT_SUCCESS_{safe_addr}_{os.getpid()}.txt"
@@ -456,6 +492,8 @@ else:
             return result
             
         except Exception as e:
+            for created_file in created_secret_files:
+                created_file.unlink(missing_ok=True)
             logger.error(f"Key extraction error: {e}")
             return None
 
@@ -489,7 +527,7 @@ else:
                 logger.info(f"📋 Instructions: {Path(key_result['success_file']).name}")
                 
                 print(f"\n✅ SUCCESS! Private keys extracted!")
-                print(f"📂 Saved to: D:\\workspace\\VisualStudio\\Midnight Claim")
+                print(f"📂 Saved to: {self.workspace}")
                 print(f"📖 Read: {Path(key_result['success_file']).name}")
                 
                 return True
@@ -535,7 +573,7 @@ def main():
     print("🎯 Midnight Claim - COMPREHENSIVE TEST")
     print("=" * 80)
     print("Testing multiple accounts, passphrase scenarios, and derivation methods")
-    print("Saving all results to: D:\\workspace\\VisualStudio\\Midnight Claim")
+    print("Saving results to CLAIM_WORKSPACE (default: ./cardano_claim_output)")
     print("=" * 80)
     
     try:
@@ -552,7 +590,7 @@ def main():
             return True
         else:
             print("\n❌ Claim test failed")
-            print("📂 Check diagnostic file in: D:\\workspace\\VisualStudio\\Midnight Claim")
+            print(f"📂 Check diagnostic file in: {claimer.workspace}")
             return False
             
     except Exception as e:

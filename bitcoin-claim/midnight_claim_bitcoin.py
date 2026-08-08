@@ -5,6 +5,7 @@ Properly generates bc1 Native SegWit addresses
 """
 
 import os
+import stat
 import unicodedata
 from pathlib import Path
 from dotenv import load_dotenv
@@ -17,6 +18,39 @@ import base58
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def write_secret_file(path: Path, content: str) -> None:
+    """Create a new private-key file and verify owner-only POSIX permissions."""
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        if os.name == "posix":
+            os.fchmod(descriptor, 0o600)
+            mode = stat.S_IMODE(os.fstat(descriptor).st_mode)
+            if mode != 0o600:
+                raise PermissionError(f"Secret file mode is {mode:o}, expected 600")
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+            descriptor = -1
+            handle.write(content)
+    except Exception:
+        if descriptor >= 0:
+            os.close(descriptor)
+        path.unlink(missing_ok=True)
+        raise
+
+
+def secure_workspace(path: Path) -> None:
+    """Restrict a key workspace where the operating system exposes POSIX modes."""
+    path.mkdir(parents=True, exist_ok=True)
+    if os.name != "posix":
+        print(
+            "WARNING: Windows ACLs are not managed; use an ACL-restricted CLAIM_WORKSPACE"
+        )
+        return
+    os.chmod(path, 0o700)
+    mode = stat.S_IMODE(path.stat().st_mode)
+    if mode != 0o700:
+        raise PermissionError(f"Claim workspace mode is {mode:o}, expected 700")
 
 class BitcoinMidnightClaimCorrected:
     def __init__(self):
@@ -35,8 +69,8 @@ class BitcoinMidnightClaimCorrected:
         print(f"Target Bitcoin address: {self.eligible_bitcoin_address}")
         print(f"Passphrase configured: {'Yes' if self.passphrase else 'No'}")
         
-        self.workspace = Path("./bitcoin_claim_output")
-        self.workspace.mkdir(parents=True, exist_ok=True)
+        self.workspace = Path(os.getenv('CLAIM_WORKSPACE', "./bitcoin_claim_output"))
+        secure_workspace(self.workspace)
 
     def _derive_master_key(self, seed_phrase, passphrase):
         """Derive master private key from seed phrase"""
@@ -350,10 +384,6 @@ class BitcoinMidnightClaimCorrected:
         wif_file = self.workspace / f"bitcoin_key_{safe_addr}_{timestamp}.wif"
         info_file = self.workspace / f"SUCCESS_{safe_addr}_{timestamp}.txt"
         
-        # Save WIF key
-        with open(wif_file, 'w') as f:
-            f.write(result['wif'])
-        
         # Save detailed info
         with open(info_file, 'w') as f:
             f.write("🎉 MIDNIGHT BITCOIN CLAIM - MATCH FOUND!\n")
@@ -363,15 +393,14 @@ class BitcoinMidnightClaimCorrected:
             f.write(f"Passphrase Scenario: {scenario_name}\n")
             f.write(f"Account: {result['account']}\n")
             f.write(f"Address Index: {result['index']}\n\n")
-            f.write("PRIVATE KEY (Compressed WIF - FOR PHANTOM WALLET):\n")
-            f.write(f"{result['wif']}\n\n")
+            f.write(f"Private key file: {wif_file.name}\n\n")
             f.write("PHANTOM WALLET IMPORT INSTRUCTIONS:\n")
             f.write("=" * 50 + "\n")
             f.write("1. Install Phantom Wallet browser extension\n")
             f.write("2. Open Phantom > Add/Connect Wallet\n")
             f.write("3. Select 'Import Private Key'\n")
             f.write("4. Choose 'Bitcoin' as blockchain\n")
-            f.write("5. Paste the WIF key above\n")
+            f.write(f"5. Paste the WIF key from {wif_file.name}\n")
             f.write("6. Complete import and verify address matches\n\n")
             f.write("MIDNIGHT PORTAL CLAIMING:\n")
             f.write("1. Go to midnight.network\n")
@@ -379,6 +408,12 @@ class BitcoinMidnightClaimCorrected:
             f.write("3. Verify correct address is shown\n")
             f.write("4. Follow claim process\n\n")
             f.write("🚨 SECURITY: DELETE ALL FILES AFTER CLAIMING!\n")
+
+        try:
+            write_secret_file(wif_file, result['wif'])
+        except Exception:
+            info_file.unlink(missing_ok=True)
+            raise
         
         print(f"\n📁 Files saved:")
         print(f"🔑 WIF Key: {wif_file.name}")
