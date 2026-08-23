@@ -1,14 +1,5 @@
-# Simple GUI Requirements
-# The simple GUI only uses Python standard library modules:
-# - tkinter (GUI framework)
-# - subprocess (to run claim scripts)  
-# - pathlib (file path handling)
-# - threading (background script execution)
-# - queue (thread communication)
-# - os, sys (system operations)
-#
-# These are all built-in to Python 3.8+, so no additional packages needed!
-#
-# However, your claim scripts still need their dependencies:
-# For Cardano claiming: see cardano-claim/requirements_cardano.txt
-# For Bitcoin claiming: see bitcoin-claim/requirements_bitcoin.txt
+# Install the current Cardano redemption dependencies from the owner file:
+-r cardano-claim/requirements_cardano.txt
+
+# tkinter is part of the regular Python installers on Windows and macOS.
+# Linux distributions may package it separately (for example python3-tk).

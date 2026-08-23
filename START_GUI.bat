@@ -1,67 +1,36 @@
 @echo off
-echo 🌙 MidnightClaimer - Simple GUI Launcher  
-echo ==========================================
-echo.
-
-REM Change to the directory where this batch file is located
+setlocal
 cd /d "%~dp0"
-echo 📁 Working directory: %CD%
+
+echo MidnightClaimer - Cardano NIGHT Redemption
+echo ===========================================
 echo.
 
-REM Check if we're in the right directory
-if not exist "simple_gui.py" (
-    echo ❌ Error: simple_gui.py not found in current directory
-    echo Please ensure you're running this from the MidnightClaimer folder
-    echo Current directory: %CD%
+set "MIDNIGHT_PYTHON="
+
+rem Prefer a repository-local environment, then inspect every Python on PATH.
+call :try_python "%~dp0.venv\Scripts\python.exe"
+for /f "delims=" %%P in ('where python 2^>nul') do call :try_python "%%P"
+
+if not defined MIDNIGHT_PYTHON (
+    echo ERROR: No Python 3.10+ installation with all required packages was found.
+    echo Install the packages for one Python installation, for example:
+    echo   py -3.12 -m pip install -r cardano-claim\requirements_cardano.txt
     pause
     exit /b 1
 )
 
-REM Check if required folders exist
-if not exist "cardano-claim" (
-    echo ❌ Error: cardano-claim folder not found
-    echo Please ensure you're running this from the MidnightClaimer root directory
-    pause
-    exit /b 1
-)
-
-if not exist "bitcoin-claim" (
-    echo ❌ Error: bitcoin-claim folder not found  
-    echo Please ensure you're running this from the MidnightClaimer root directory
-    pause
-    exit /b 1
-)
-
-REM Check if Python is available
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ❌ Python is not installed or not in PATH
-    echo Please install Python 3.8+ from https://python.org
-    pause
-    exit /b 1
-)
-
-echo ✅ Python found: 
-python --version
-
-REM Check if tkinter is available
-python -c "import tkinter" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ❌ tkinter is not available
-    echo Please install tkinter or use Python with tkinter support
-    echo.
-    echo For Windows, tkinter should be included with Python
-    echo Try reinstalling Python from https://python.org
-    pause
-    exit /b 1
-)
-
-echo ✅ tkinter is available
+echo Using Python: %MIDNIGHT_PYTHON%
+"%MIDNIGHT_PYTHON%" simple_gui.py
+set "MIDNIGHT_EXIT_CODE=%errorlevel%"
 echo.
-
-REM Run the simple GUI
-echo ✅ Starting simple GUI...
-python simple_gui.py
-
-echo.
+if not "%MIDNIGHT_EXIT_CODE%"=="0" echo MidnightClaimer ended with exit code %MIDNIGHT_EXIT_CODE%.
 pause
+exit /b %MIDNIGHT_EXIT_CODE%
+
+:try_python
+if defined MIDNIGHT_PYTHON exit /b 0
+if not exist "%~1" exit /b 0
+"%~1" -c "import sys, tkinter, requests, nacl, pycardano, cbor2, trezorlib; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
+if not errorlevel 1 set "MIDNIGHT_PYTHON=%~1"
+exit /b 0
