@@ -7,7 +7,7 @@
 - App registry entries: none detected in `Libraries/Python/ApplicationRegistry.py`
 
 ## Quick start
-- Read: `README.md`, `CLAUDE.md`
+- Read: `Readme.md`, `README_SIMPLE_GUI.md`
 - Local start scripts in repo root: `START_GUI.bat`, `run_simple_gui.sh`
 
 ## Setup
